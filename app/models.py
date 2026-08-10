@@ -1,4 +1,4 @@
-from sqlalchemy import Column, Integer, String, Float, Boolean, DateTime, Text
+from sqlalchemy import Column, Integer, String, Float, Boolean, DateTime, Text, ForeignKey
 from sqlalchemy.orm import relationship
 from datetime import datetime
 from .database import Base
@@ -20,5 +20,24 @@ class Product(Base):
     id = Column(Integer, primary_key=True, index=True)
     title = Column(String, nullable=False)
     description = Column(Text, default="")
+    category = Column(String, default="document")  # document, software, service
     price_btc = Column(Float, nullable=False)
-    # add your other product fields here
+    price_usd_approx = Column(Float, default=0.0)
+    file_path = Column(String, nullable=True)  # relative path inside uploads/
+    is_active = Column(Boolean, default=True)
+    created_at = Column(DateTime, default=datetime.utcnow)
+
+    orders = relationship("Order", back_populates="product")
+
+class Order(Base):
+    __tablename__ = "orders"
+    id = Column(Integer, primary_key=True, index=True)
+    user_id = Column(Integer, ForeignKey("users.id"), nullable=False)
+    product_id = Column(Integer, ForeignKey("products.id"), nullable=False)
+    amount_btc = Column(Float, nullable=False)
+    status = Column(String, default="pending")  # pending, paid
+    tx_id = Column(String, nullable=True)
+    created_at = Column(DateTime, default=datetime.utcnow)
+
+    user = relationship("User", back_populates="orders")
+    product = relationship("Product", back_populates="orders")
