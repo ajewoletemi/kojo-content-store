@@ -1,4 +1,4 @@
-from fastapi import FastAPI, Request, Depends
+from fastapi import FastAPI, Request
 from fastapi.templating import Jinja2Templates
 from fastapi.staticfiles import StaticFiles
 from fastapi.responses import HTMLResponse
@@ -7,14 +7,14 @@ import app.models  # creates tables
 
 app = FastAPI(title="Kojo Content Store API")
 
-# SERVE STATIC FILES AND TEMPLATES FOR THE BEAUTIFUL PAGES
+# SERVE YOUR STATIC FILES AND TEMPLATES
 app.mount("/static", StaticFiles(directory="app/static"), name="static")
 templates = Jinja2Templates(directory="app/templates")
 
-# THIS CREATES ALL TABLES ON STARTUP
+# THIS CREATES ALL TABLES ON STARTUP - THIS IS THE FIX
 Base.metadata.create_all(bind=engine)
 
-# --- API ROUTES ---
+# --- INCLUDE YOUR API ROUTERS ---
 from app.routers import user, product, auth
 app.include_router(user.router, prefix="/api/users", tags=["users"])
 app.include_router(product.router, prefix="/api/products", tags=["products"])
