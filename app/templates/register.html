@@ -9,7 +9,9 @@
 <body>
   <div class="auth-wrapper">
     <div class="auth-card">
-      <div class="logo">Kojo <span class="rest">Tools Store</span></div>
+      <div class="logo" style="justify-content:center; margin-bottom:0.3rem;">
+        Kojo <span class="rest">Tools Store</span>
+      </div>
       <p class="subtitle">Create your free account</p>
 
       {% if error %}
@@ -29,11 +31,14 @@
           <label>Password</label>
           <input type="password" name="password" required placeholder="Min. 6 characters" minlength="6" autocomplete="new-password">
         </div>
-        <button type="submit" class="btn btn-blue btn-full" style="margin-top:0.4rem;">Create Account</button>
+        <button type="submit" class="btn btn-blue btn-full" style="margin-top:0.5rem;">
+          Create Account
+        </button>
       </form>
 
-      <p style="text-align:center; margin-top:1.4rem; font-size:0.9rem; color:#64748b;">
-        Already have an account? <a href="/login">Sign in</a>
+      <p style="text-align:center; margin-top:1.5rem; font-size:0.9rem; color:#64748b;">
+        Already have an account?
+        <a href="/login" style="font-weight:600;">Sign in</a>
       </p>
     </div>
   </div>
