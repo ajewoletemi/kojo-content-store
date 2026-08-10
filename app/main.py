@@ -43,6 +43,18 @@ def create_admin_if_needed(db: Session):
 @app.on_event("startup")
 def startup():
     db = next(get_db())
+    try:
+        # Auto migrate columns from BTC to USD
+        db.execute(text("ALTER TABLE products RENAME COLUMN price_btc TO price_usd"))
+        db.execute(text("ALTER TABLE products DROP COLUMN IF EXISTS price_usd_approx"))
+        db.execute(text("ALTER TABLE orders RENAME COLUMN amount_btc TO amount_usd"))
+        db.execute(text("ALTER TABLE orders RENAME COLUMN tx_id TO notes"))
+        db.commit()
+        print("✅ DB Migrated to USD")
+    except Exception as e:
+        db.rollback()
+        print(f"ℹ️ DB already migrated or new: {e}")
+    
     create_admin_if_needed(db)
     db.close()
 
