@@ -7,7 +7,7 @@ python-jose[cryptography]
 jinja2
 aiofiles
 pydantic>=2.9.0
-bcrypt
+bcrypt==4.0.1
 python-dotenv
 email-validator
 psycopg2-binary==2.9.9
