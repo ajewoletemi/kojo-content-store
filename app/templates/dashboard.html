@@ -1,9 +1,19 @@
 {% extends "base.html" %}
 {% block title %}Dashboard · {{ site_name }}{% endblock %}
+
 {% block content %}
 <div class="container">
-  <h2 class="section-title">Available Products</h2>
-  <p style="color:#6b7280; margin-bottom:1rem;">Browse documents, software and services. Payments are made with Bitcoin.</p>
+
+  <!-- Welcome -->
+  <div style="margin-bottom: 2rem;">
+    <h2 class="section-title">Welcome back{% if user.full_name %}, {{ user.full_name.split()[0] }}{% endif %}</h2>
+    <p style="color:#6b7280; margin-top:0.3rem;">
+      Browse available products and manage your orders.
+    </p>
+  </div>
+
+  <!-- Products Section -->
+  <h3 class="section-title" style="font-size:1.15rem; margin-bottom:0.8rem;">Available Products</h3>
 
   {% if products %}
   <div class="grid">
@@ -11,12 +21,15 @@
     <div class="card product-card">
       <span class="category">{{ p.category|capitalize }}</span>
       <h3>{{ p.title }}</h3>
-      <p class="desc">{{ p.description or "No description" }}</p>
-      <div style="display:flex; justify-content:space-between; align-items:center; margin-top:0.8rem;">
+      <p class="desc">{{ p.description or "No description provided." }}</p>
+
+      <div style="display:flex; justify-content:space-between; align-items:flex-end; margin-top:auto; gap:0.8rem;">
         <div>
           <div class="price">{{ "%.8f"|format(p.price_btc) }} BTC</div>
-          {% if p.price_usd_approx > 0 %}
-          <div style="font-size:0.8rem; color:#9ca3af;">≈ ${{ "%.2f"|format(p.price_usd_approx) }}</div>
+          {% if p.price_usd_approx and p.price_usd_approx > 0 %}
+          <div style="font-size:0.8rem; color:#9ca3af; margin-top:2px;">
+            ≈ ${{ "%.2f"|format(p.price_usd_approx) }}
+          </div>
           {% endif %}
         </div>
         <form method="post" action="/buy/{{ p.id }}">
@@ -27,14 +40,18 @@
     {% endfor %}
   </div>
   {% else %}
-  <div class="card" style="text-align:center; color:#6b7280;">
-    No products available yet.
+  <div class="card" style="text-align:center; padding:2.5rem 1.5rem; color:#6b7280;">
+    <div style="font-size:2.5rem; margin-bottom:0.8rem;">📦</div>
+    <p style="font-size:1.05rem; margin-bottom:0.4rem;">No products available yet</p>
+    <p style="font-size:0.9rem;">Check back later or contact the admin.</p>
   </div>
   {% endif %}
 
-  <h2 class="section-title" style="margin-top:2.5rem;">My Orders</h2>
+  <!-- My Orders -->
+  <h3 class="section-title" style="font-size:1.15rem; margin-top:3rem; margin-bottom:0.8rem;">My Orders</h3>
+
   {% if orders %}
-  <div class="card" style="overflow-x:auto;">
+  <div class="card" style="overflow-x:auto; padding:0;">
     <table>
       <thead>
         <tr>
@@ -43,13 +60,13 @@
           <th>Amount</th>
           <th>Status</th>
           <th>Date</th>
-          <th></th>
+          <th style="text-align:right;">Action</th>
         </tr>
       </thead>
       <tbody>
         {% for o in orders %}
         <tr>
-          <td>#{{ o.id }}</td>
+          <td><strong>#{{ o.id }}</strong></td>
           <td>{{ o.product.title }}</td>
           <td>{{ "%.8f"|format(o.amount_btc) }} BTC</td>
           <td>
@@ -58,10 +75,10 @@
             </span>
           </td>
           <td>{{ o.created_at.strftime("%Y-%m-%d") }}</td>
-          <td>
+          <td style="text-align:right; white-space:nowrap;">
             <a href="/order/{{ o.id }}" class="btn btn-outline btn-sm">View</a>
             {% if o.status == 'paid' and o.product.file_path %}
-            <a href="/download/{{ o.id }}" class="btn btn-blue btn-sm">Download</a>
+            <a href="/download/{{ o.id }}" class="btn btn-blue btn-sm" style="margin-left:0.4rem;">Download</a>
             {% endif %}
           </td>
         </tr>
@@ -70,7 +87,10 @@
     </table>
   </div>
   {% else %}
-  <div class="card" style="text-align:center; color:#6b7280;">You have no orders yet.</div>
+  <div class="card" style="text-align:center; padding:2rem 1.5rem; color:#6b7280;">
+    <p>You haven’t placed any orders yet.</p>
+  </div>
   {% endif %}
+
 </div>
 {% endblock %}
