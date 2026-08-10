@@ -1,39 +1,280 @@
-from fastapi import FastAPI, Request
+from fastapi import FastAPI, Request, Depends, Form, UploadFile, File, HTTPException
 from fastapi.templating import Jinja2Templates
 from fastapi.staticfiles import StaticFiles
-from fastapi.responses import HTMLResponse
-from app.database import Base, engine
-import app.models  # creates tables
+from fastapi.responses import HTMLResponse, RedirectResponse, FileResponse
+from fastapi.security import OAuth2PasswordRequestForm
+from sqlalchemy.orm import Session
+from datetime import datetime
+import os
+import shutil
+import uuid
+from pathlib import Path
 
-app = FastAPI(title="Kojo Content Store API")
+from .database import engine, Base, get_db
+from .models import User, Product, Order
+from .auth import (
+    get_password_hash, authenticate_user, create_access_token,
+    get_current_user, require_user, require_admin
+)
 
-# SERVE YOUR STATIC FILES AND TEMPLATES
+# Create tables
+Base.metadata.create_all(bind=engine)
+
+app = FastAPI(title="Kojo Tools Store")
+
+# Static & templates
 app.mount("/static", StaticFiles(directory="app/static"), name="static")
 templates = Jinja2Templates(directory="app/templates")
 
-# THIS CREATES ALL TABLES ON STARTUP - THIS IS THE FIX
-Base.metadata.create_all(bind=engine)
+# Uploads folder
+UPLOAD_DIR = Path("app/uploads")
+UPLOAD_DIR.mkdir(parents=True, exist_ok=True)
 
-# --- INCLUDE YOUR API ROUTERS ---
-from app.routers import user, product, auth
-app.include_router(user.router, prefix="/api/users", tags=["users"])
-app.include_router(product.router, prefix="/api/products", tags=["products"])
-app.include_router(auth.router, prefix="/api/auth", tags=["auth"])
+SITE_NAME = os.getenv("SITE_NAME", "Kojo Tools Store")
+BITCOIN_ADDRESS = os.getenv("BITCOIN_ADDRESS", "bc1qxy2kgdygjrsqtzq2n0yrf2493p83kkfjhx0wlh")
+ADMIN_EMAIL = os.getenv("ADMIN_EMAIL", "admin@example.com")
+ADMIN_PASSWORD = os.getenv("ADMIN_PASSWORD", "ChangeMe123!")
 
+def create_admin_if_needed(db: Session):
+    admin = db.query(User).filter(User.email == ADMIN_EMAIL).first()
+    if not admin:
+        admin = User(
+            email=ADMIN_EMAIL,
+            hashed_password=get_password_hash(ADMIN_PASSWORD),
+            full_name="Admin",
+            is_admin=True
+        )
+        db.add(admin)
+        db.commit()
+        print(f"Admin created: {ADMIN_EMAIL}")
 
-# --- WEB PAGES ---
+@app.on_event("startup")
+def startup():
+    db = next(get_db())
+    create_admin_if_needed(db)
+    db.close()
+
+# ---------- Helpers ----------
+def render(request: Request, name: str, context: dict = None, user=None):
+    ctx = {"request": request, "site_name": SITE_NAME, "user": user}
+    if context:
+        ctx.update(context)
+    return templates.TemplateResponse(name, ctx)
+
+# ---------- Auth Pages ----------
 @app.get("/", response_class=HTMLResponse)
-def home(request: Request):
-    return templates.TemplateResponse("index.html", {"request": request})
+async def home(request: Request, user=Depends(get_current_user)):
+    if user:
+        return RedirectResponse("/dashboard", status_code=303)
+    return RedirectResponse("/login", status_code=303)
 
 @app.get("/login", response_class=HTMLResponse)
-def login_page(request: Request):
-    return templates.TemplateResponse("login.html", {"request": request})
+async def login_page(request: Request, user=Depends(get_current_user)):
+    if user:
+        return RedirectResponse("/dashboard", status_code=303)
+    return render(request, "login.html")
 
-@app.get("/products", response_class=HTMLResponse)
-def products_page(request: Request):
-    return templates.TemplateResponse("products.html", {"request": request})
+@app.post("/login")
+async def login(
+    request: Request,
+    email: str = Form(...),
+    password: str = Form(...),
+    db: Session = Depends(get_db)
+):
+    user = authenticate_user(db, email, password)
+    if not user:
+        return render(request, "login.html", {"error": "Invalid email or password"})
+    token = create_access_token({"sub": user.email})
+    response = RedirectResponse("/dashboard", status_code=303)
+    response.set_cookie(key="access_token", value=token, httponly=True, max_age=60*60*24*7)
+    return response
 
+@app.get("/register", response_class=HTMLResponse)
+async def register_page(request: Request, user=Depends(get_current_user)):
+    if user:
+        return RedirectResponse("/dashboard", status_code=303)
+    return render(request, "register.html")
+
+@app.post("/register")
+async def register(
+    request: Request,
+    full_name: str = Form(""),
+    email: str = Form(...),
+    password: str = Form(...),
+    db: Session = Depends(get_db)
+):
+    if db.query(User).filter(User.email == email).first():
+        return render(request, "register.html", {"error": "Email already registered"})
+    if len(password) < 6:
+        return render(request, "register.html", {"error": "Password must be at least 6 characters"})
+    user = User(
+        email=email,
+        hashed_password=get_password_hash(password),
+        full_name=full_name
+    )
+    db.add(user)
+    db.commit()
+    token = create_access_token({"sub": user.email})
+    response = RedirectResponse("/dashboard", status_code=303)
+    response.set_cookie(key="access_token", value=token, httponly=True, max_age=60*60*24*7)
+    return response
+
+@app.get("/logout")
+async def logout():
+    response = RedirectResponse("/login", status_code=303)
+    response.delete_cookie("access_token")
+    return response
+
+# ---------- Dashboard ----------
+@app.get("/dashboard", response_class=HTMLResponse)
+async def dashboard(
+    request: Request,
+    user=Depends(require_user),
+    db: Session = Depends(get_db)
+):
+    products = db.query(Product).filter(Product.is_active == True).order_by(Product.created_at.desc()).all()
+    orders = db.query(Order).filter(Order.user_id == user.id).order_by(Order.created_at.desc()).all()
+    return render(request, "dashboard.html", {"products": products, "orders": orders}, user=user)
+
+# ---------- Buy / Order ----------
+@app.post("/buy/{product_id}")
+async def buy_product(
+    product_id: int,
+    user=Depends(require_user),
+    db: Session = Depends(get_db)
+):
+    product = db.query(Product).filter(Product.id == product_id, Product.is_active == True).first()
+    if not product:
+        raise HTTPException(404, "Product not found")
+    order = Order(
+        user_id=user.id,
+        product_id=product.id,
+        amount_btc=product.price_btc,
+        status="pending"
+    )
+    db.add(order)
+    db.commit()
+    db.refresh(order)
+    return RedirectResponse(f"/order/{order.id}", status_code=303)
+
+@app.get("/order/{order_id}", response_class=HTMLResponse)
+async def order_page(
+    order_id: int,
+    request: Request,
+    user=Depends(require_user),
+    db: Session = Depends(get_db)
+):
+    order = db.query(Order).filter(Order.id == order_id, Order.user_id == user.id).first()
+    if not order:
+        raise HTTPException(404, "Order not found")
+    return render(
+        request,
+        "order.html",
+        {"order": order, "bitcoin_address": BITCOIN_ADDRESS},
+        user=user
+    )
+
+@app.post("/order/{order_id}/confirm")
+async def confirm_payment(
+    order_id: int,
+    tx_id: str = Form(""),
+    user=Depends(require_user),
+    db: Session = Depends(get_db)
+):
+    order = db.query(Order).filter(Order.id == order_id, Order.user_id == user.id).first()
+    if not order:
+        raise HTTPException(404, "Order not found")
+    if order.status == "paid":
+        return RedirectResponse(f"/order/{order_id}", status_code=303)
+    order.tx_id = tx_id.strip() or order.tx_id
+    db.commit()
+    return RedirectResponse(f"/order/{order_id}", status_code=303)
+
+@app.get("/download/{order_id}")
+async def download_file(
+    order_id: int,
+    user=Depends(require_user),
+    db: Session = Depends(get_db)
+):
+    order = db.query(Order).filter(Order.id == order_id, Order.user_id == user.id).first()
+    if not order or order.status != "paid":
+        raise HTTPException(403, "Payment not confirmed")
+    if not order.product.file_path:
+        raise HTTPException(404, "No file for this product")
+    file_path = UPLOAD_DIR / order.product.file_path
+    if not file_path.exists():
+        raise HTTPException(404, "File missing on server")
+    return FileResponse(file_path, filename=file_path.name)
+
+# ---------- Admin ----------
+@app.get("/admin", response_class=HTMLResponse)
+async def admin_panel(
+    request: Request,
+    user=Depends(require_admin),
+    db: Session = Depends(get_db)
+):
+    products = db.query(Product).order_by(Product.created_at.desc()).all()
+    orders = db.query(Order).order_by(Order.created_at.desc()).limit(50).all()
+    return render(request, "admin.html", {"products": products, "orders": orders}, user=user)
+
+@app.post("/admin/upload")
+async def admin_upload(
+    title: str = Form(...),
+    category: str = Form("document"),
+    description: str = Form(""),
+    price_btc: float = Form(...),
+    price_usd_approx: float = Form(0.0),
+    file: UploadFile = File(None),
+    user=Depends(require_admin),
+    db: Session = Depends(get_db)
+):
+    file_path = None
+    if file and file.filename:
+        ext = Path(file.filename).suffix
+        unique_name = f"{uuid.uuid4().hex}{ext}"
+        dest = UPLOAD_DIR / unique_name
+        with open(dest, "wb") as buffer:
+            shutil.copyfileobj(file.file, buffer)
+        file_path = unique_name
+
+    product = Product(
+        title=title,
+        description=description,
+        category=category,
+        price_btc=price_btc,
+        price_usd_approx=price_usd_approx,
+        file_path=file_path,
+        is_active=True
+    )
+    db.add(product)
+    db.commit()
+    return RedirectResponse("/admin", status_code=303)
+
+@app.post("/admin/toggle/{product_id}")
+async def toggle_product(
+    product_id: int,
+    user=Depends(require_admin),
+    db: Session = Depends(get_db)
+):
+    product = db.query(Product).filter(Product.id == product_id).first()
+    if product:
+        product.is_active = not product.is_active
+        db.commit()
+    return RedirectResponse("/admin", status_code=303)
+
+@app.post("/admin/order/{order_id}/mark-paid")
+async def mark_paid(
+    order_id: int,
+    user=Depends(require_admin),
+    db: Session = Depends(get_db)
+):
+    order = db.query(Order).filter(Order.id == order_id).first()
+    if order:
+        order.status = "paid"
+        db.commit()
+    return RedirectResponse("/admin", status_code=303)
+
+# Health check
 @app.get("/health")
-def health_check():
-    return {"status": "healthy"}
+def health():
+    return {"status": "healthy", "site": SITE_NAME}
