@@ -21,8 +21,7 @@ class Product(Base):
     title = Column(String, nullable=False)
     description = Column(Text, default="")
     category = Column(String, default="document")  # document | software | service
-    price_btc = Column(Float, nullable=False)
-    price_usd_approx = Column(Float, default=0.0)
+    price_usd = Column(Float, nullable=False)  # USD ONLY
     file_path = Column(String, nullable=True)
     is_active = Column(Boolean, default=True)
     created_at = Column(DateTime, default=datetime.utcnow)
@@ -34,9 +33,9 @@ class Order(Base):
     id = Column(Integer, primary_key=True, index=True)
     user_id = Column(Integer, ForeignKey("users.id"), nullable=False)
     product_id = Column(Integer, ForeignKey("products.id"), nullable=False)
-    amount_btc = Column(Float, nullable=False)
+    amount_usd = Column(Float, nullable=False)  # USD ONLY
     status = Column(String, default="pending")  # pending | paid
-    tx_id = Column(String, nullable=True)
+    notes = Column(String, nullable=True)  # for payment proof instead of tx_id
     created_at = Column(DateTime, default=datetime.utcnow)
 
     user = relationship("User", back_populates="orders")
