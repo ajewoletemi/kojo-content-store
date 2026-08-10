@@ -3,7 +3,6 @@ from typing import Optional
 from jose import JWTError, jwt
 from passlib.context import CryptContext
 from fastapi import Depends, HTTPException, status, Request
-from fastapi.security import OAuth2PasswordBearer
 from sqlalchemy.orm import Session
 import os
 
@@ -15,7 +14,6 @@ ALGORITHM = "HS256"
 ACCESS_TOKEN_EXPIRE_MINUTES = 60 * 24 * 7  # 7 days
 
 pwd_context = CryptContext(schemes=["bcrypt"], deprecated="auto")
-oauth2_scheme = OAuth2PasswordBearer(tokenUrl="/login", auto_error=False)
 
 def verify_password(plain, hashed):
     return pwd_context.verify(plain, hashed)
@@ -52,12 +50,12 @@ async def get_current_user(request: Request, db: Session = Depends(get_db)):
     user = get_user_by_email(db, email)
     return user
 
-async def require_user(user = Depends(get_current_user)):
+async def require_user(user=Depends(get_current_user)):
     if not user:
         raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Not authenticated")
     return user
 
-async def require_admin(user = Depends(require_user)):
+async def require_admin(user=Depends(require_user)):
     if not user.is_admin:
         raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Admin only")
     return user
