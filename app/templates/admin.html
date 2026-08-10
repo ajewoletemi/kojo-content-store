@@ -1,16 +1,23 @@
 {% extends "base.html" %}
 {% block title %}Admin · {{ site_name }}{% endblock %}
+
 {% block content %}
 <div class="container">
-  <h2 class="section-title">Admin Panel</h2>
 
-  <div class="card" style="margin-bottom:2rem;">
-    <h3 style="margin-bottom:1rem;">Upload New Product</h3>
+  <div style="margin-bottom: 2rem;">
+    <h2 class="section-title">Admin Panel</h2>
+    <p style="color:#6b7280; margin-top:0.3rem;">Manage products and confirm payments.</p>
+  </div>
+
+  <!-- Upload New Product -->
+  <div class="card" style="margin-bottom:2.5rem;">
+    <h3 style="margin-bottom:1.2rem; font-size:1.15rem;">Upload New Product</h3>
+
     <form method="post" action="/admin/upload" enctype="multipart/form-data">
-      <div style="display:grid; grid-template-columns:1fr 1fr; gap:1rem;">
+      <div class="two-col" style="margin-bottom:0.2rem;">
         <div class="form-group">
           <label>Title *</label>
-          <input type="text" name="title" required>
+          <input type="text" name="title" required placeholder="e.g. Premium PDF Guide">
         </div>
         <div class="form-group">
           <label>Category *</label>
@@ -21,30 +28,37 @@
           </select>
         </div>
       </div>
+
       <div class="form-group">
         <label>Description</label>
-        <textarea name="description" rows="3"></textarea>
+        <textarea name="description" rows="3" placeholder="Short description of the product..."></textarea>
       </div>
-      <div style="display:grid; grid-template-columns:1fr 1fr 1fr; gap:1rem;">
+
+      <div class="three-col">
         <div class="form-group">
           <label>Price (BTC) *</label>
-          <input type="number" name="price_btc" step="0.00000001" min="0" required>
+          <input type="number" name="price_btc" step="0.00000001" min="0" required placeholder="0.001">
         </div>
         <div class="form-group">
           <label>Approx. USD (display only)</label>
-          <input type="number" name="price_usd_approx" step="0.01" min="0" value="0">
+          <input type="number" name="price_usd_approx" step="0.01" min="0" value="0" placeholder="25.00">
         </div>
         <div class="form-group">
           <label>File (optional for services)</label>
           <input type="file" name="file">
         </div>
       </div>
-      <button type="submit" class="btn btn-orange">Upload Product</button>
+
+      <button type="submit" class="btn btn-orange" style="margin-top:0.5rem;">
+        Upload Product
+      </button>
     </form>
   </div>
 
-  <h3 class="section-title">All Products</h3>
-  <div class="card" style="overflow-x:auto; margin-bottom:2rem;">
+  <!-- All Products -->
+  <h3 class="section-title" style="font-size:1.15rem; margin-bottom:0.8rem;">All Products</h3>
+
+  <div class="card" style="overflow-x:auto; margin-bottom:2.5rem; padding:0;">
     <table>
       <thead>
         <tr>
@@ -53,25 +67,33 @@
           <th>Category</th>
           <th>Price (BTC)</th>
           <th>Status</th>
-          <th>Action</th>
+          <th style="text-align:right;">Action</th>
         </tr>
       </thead>
       <tbody>
         {% for p in products %}
         <tr>
           <td>{{ p.id }}</td>
-          <td>{{ p.title }}</td>
-          <td>{{ p.category }}</td>
+          <td><strong>{{ p.title }}</strong></td>
+          <td>{{ p.category|capitalize }}</td>
           <td>{{ "%.8f"|format(p.price_btc) }}</td>
           <td>
-            <span class="badge {% if p.is_active %}badge-paid{% else %}badge-pending{% endif %}">
+            <span class="badge {% if p.is_active %}badge-paid{% else %}badge-hidden{% endif %}">
               {{ "Active" if p.is_active else "Hidden" }}
             </span>
           </td>
-          <td>
+          <td style="text-align:right;">
             <form method="post" action="/admin/toggle/{{ p.id }}" style="display:inline;">
-              <button class="btn btn-outline btn-sm">{{ "Hide" if p.is_active else "Show" }}</button>
+              <button class="btn btn-outline btn-sm">
+                {{ "Hide" if p.is_active else "Show" }}
+              </button>
             </form>
+          </td>
+        </tr>
+        {% else %}
+        <tr>
+          <td colspan="6" style="text-align:center; padding:2rem; color:#6b7280;">
+            No products uploaded yet.
           </td>
         </tr>
         {% endfor %}
@@ -79,8 +101,10 @@
     </table>
   </div>
 
-  <h3 class="section-title">Recent Orders</h3>
-  <div class="card" style="overflow-x:auto;">
+  <!-- Recent Orders -->
+  <h3 class="section-title" style="font-size:1.15rem; margin-bottom:0.8rem;">Recent Orders</h3>
+
+  <div class="card" style="overflow-x:auto; padding:0;">
     <table>
       <thead>
         <tr>
@@ -90,35 +114,44 @@
           <th>Amount</th>
           <th>TX ID</th>
           <th>Status</th>
-          <th>Action</th>
+          <th style="text-align:right;">Action</th>
         </tr>
       </thead>
       <tbody>
         {% for o in orders %}
         <tr>
-          <td>#{{ o.id }}</td>
+          <td><strong>#{{ o.id }}</strong></td>
           <td>{{ o.user.email }}</td>
           <td>{{ o.product.title }}</td>
           <td>{{ "%.8f"|format(o.amount_btc) }}</td>
-          <td style="max-width:140px; overflow:hidden; text-overflow:ellipsis;">{{ o.tx_id or "—" }}</td>
+          <td style="max-width:160px; overflow:hidden; text-overflow:ellipsis; white-space:nowrap;">
+            {{ o.tx_id or "—" }}
+          </td>
           <td>
             <span class="badge {% if o.status == 'paid' %}badge-paid{% else %}badge-pending{% endif %}">
               {{ o.status }}
             </span>
           </td>
-          <td>
+          <td style="text-align:right;">
             {% if o.status != 'paid' %}
             <form method="post" action="/admin/order/{{ o.id }}/mark-paid" style="display:inline;">
               <button class="btn btn-blue btn-sm">Mark Paid</button>
             </form>
             {% else %}
-            —
+            <span style="color:#16a34a; font-size:0.85rem;">✓ Paid</span>
             {% endif %}
+          </td>
+        </tr>
+        {% else %}
+        <tr>
+          <td colspan="7" style="text-align:center; padding:2rem; color:#6b7280;">
+            No orders yet.
           </td>
         </tr>
         {% endfor %}
       </tbody>
     </table>
   </div>
+
 </div>
 {% endblock %}
