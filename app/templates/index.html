@@ -1,27 +1,34 @@
 <!DOCTYPE html>
 <html lang="en">
 <head>
-    <meta charset="UTF-8">
-    <title>Kojo Content Store</title>
-    <link rel="stylesheet" href="/static/style.css">
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>{{ site_name }}</title>
+  <link rel="stylesheet" href="/static/css/style.css">
 </head>
 <body>
-    <header class="header">
-        <div class="logo">Kojo<span class="rest">Store</span></div>
-        <nav class="nav">
-            <a href="/">Home</a>
-            <a href="/products">Products</a>
-            <a href="/login">Login</a>
-            <a href="/docs">API</a>
-        </nav>
-    </header>
+  <header class="header">
+    <div class="logo">Kojo <span class="rest">Tools Store</span></div>
+    <nav class="nav">
+      <a href="/login">Login</a>
+      <a href="/register" class="btn btn-blue btn-sm">Get Started</a>
+    </nav>
+  </header>
 
-    <div class="container">
-        <h1 class="section-title">Welcome to Kojo Content Store</h1>
-        <p class="section-sub">Buy premium digital content with Bitcoin</p>
-        <a href="/products" class="btn btn-orange">Browse Products</a>
+  <div class="container" style="text-align:center; padding-top:4rem; padding-bottom:4rem;">
+    <h1 class="section-title" style="font-size:2.1rem;">Premium Digital Content</h1>
+    <p class="section-sub" style="max-width:520px; margin:0.8rem auto 2rem;">
+      Buy documents, Windows software and services.<br>
+      Secure payments with Bitcoin.
+    </p>
+    <div style="display:flex; gap:1rem; justify-content:center; flex-wrap:wrap;">
+      <a href="/register" class="btn btn-orange">Create Free Account</a>
+      <a href="/login" class="btn btn-outline">Sign In</a>
     </div>
+  </div>
 
-    <footer class="footer">© 2026 Kojo Content Store</footer>
+  <div class="footer">
+    &copy; 2026 {{ site_name }} · Made by Kojo
+  </div>
 </body>
 </html>
