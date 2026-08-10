@@ -379,3 +379,24 @@ tr:last-child td { border-bottom: none; }
   .header { flex-direction: column; gap: 0.7rem; }
   .nav { flex-wrap: wrap; justify-content: center; }
 }
+
+/* --- Top Nav Buttons Fix --- */
+.nav a[href*="login"] {
+    color: #111827; /* Dark gray, very visible */
+    font-weight: 600;
+    text-decoration: none;
+}
+
+.nav a[href*="register"],
+.nav a[href*="signup"] {
+    background-color: #2563eb; /* Your blue */
+    color: #ffffff !important; /* White font */
+    font-weight: 600;
+    padding: 8px 16px;
+    border-radius: 8px;
+    text-decoration: none;
+}
+
+.nav a[href*="register"]:hover {
+    background-color: #1d4ed8; /* Darker blue on hover */
+}
