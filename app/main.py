@@ -19,6 +19,19 @@ from .auth import (
 )
 
 Base.metadata.create_all(bind=engine)
+
+# TRIAL FIX: Delete old DB if migration fails
+DB_PATH = Path("app/kojo_store.db")
+if DB_PATH.exists():
+    try:
+        db = next(get_db())
+        db.execute(text("SELECT image_url FROM products LIMIT 1"))
+        db.close()
+    except:
+        print("⚠️ Old DB detected. Deleting and recreating...")
+        DB_PATH.unlink()
+        Base.metadata.create_all(bind=engine)
+
 app = FastAPI(title="Kojo Tools Store")
 
 app.mount("/static", StaticFiles(directory="app/static"), name="static")
