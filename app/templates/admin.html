@@ -34,14 +34,10 @@
         <textarea name="description" rows="3" placeholder="Short description of the product..."></textarea>
       </div>
 
-      <div class="three-col">
+      <div class="two-col">
         <div class="form-group">
-          <label>Price (BTC) *</label>
-          <input type="number" name="price_btc" step="0.00000001" min="0" required placeholder="0.001">
-        </div>
-        <div class="form-group">
-          <label>Approx. USD (display only)</label>
-          <input type="number" name="price_usd_approx" step="0.01" min="0" value="0" placeholder="25.00">
+          <label>Price (USD) *</label>
+          <input type="number" name="price_usd" step="0.01" min="0" required placeholder="50.00">
         </div>
         <div class="form-group">
           <label>File (optional for services)</label>
@@ -65,7 +61,7 @@
           <th>ID</th>
           <th>Title</th>
           <th>Category</th>
-          <th>Price (BTC)</th>
+          <th>Price (USD)</th>
           <th>Status</th>
           <th style="text-align:right;">Action</th>
         </tr>
@@ -76,7 +72,7 @@
           <td>{{ p.id }}</td>
           <td><strong>{{ p.title }}</strong></td>
           <td>{{ p.category|capitalize }}</td>
-          <td>{{ "%.8f"|format(p.price_btc) }}</td>
+          <td>${{ "%.2f"|format(p.price_usd) }}</td>
           <td>
             <span class="badge {% if p.is_active %}badge-paid{% else %}badge-hidden{% endif %}">
               {{ "Active" if p.is_active else "Hidden" }}
@@ -112,7 +108,7 @@
           <th>User</th>
           <th>Product</th>
           <th>Amount</th>
-          <th>TX ID</th>
+          <th>Notes</th>
           <th>Status</th>
           <th style="text-align:right;">Action</th>
         </tr>
@@ -123,9 +119,9 @@
           <td><strong>#{{ o.id }}</strong></td>
           <td>{{ o.user.email }}</td>
           <td>{{ o.product.title }}</td>
-          <td>{{ "%.8f"|format(o.amount_btc) }}</td>
+          <td>${{ "%.2f"|format(o.amount_usd) }}</td>
           <td style="max-width:160px; overflow:hidden; text-overflow:ellipsis; white-space:nowrap;">
-            {{ o.tx_id or "—" }}
+            {{ o.notes or "—" }}
           </td>
           <td>
             <span class="badge {% if o.status == 'paid' %}badge-paid{% else %}badge-pending{% endif %}">
