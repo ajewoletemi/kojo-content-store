@@ -2,67 +2,48 @@
 {% block title %}Order #{{ order.id }} · {{ site_name }}{% endblock %}
 
 {% block content %}
-<div class="container" style="max-width:640px;">
+<div class="container" style="max-width: 700px;">
 
-  <div style="margin-bottom:1.5rem;">
-    <a href="/dashboard" style="font-size:0.9rem; color:#64748b;">← Back to Dashboard</a>
-  </div>
-
-  <h2 class="section-title">Order #{{ order.id }}</h2>
-
-  <div class="card" style="margin-top:1rem;">
-    <div style="display:grid; gap:0.7rem;">
-      <p><strong>Product:</strong> {{ order.product.title }}</p>
-      <p><strong>Category:</strong> {{ order.product.category|capitalize }}</p>
-      <p>
-        <strong>Amount:</strong>
-        <span style="color:#ea580c; font-weight:700; font-size:1.15rem;">
-          {{ "%.8f"|format(order.amount_btc) }} BTC
-        </span>
-      </p>
-      <p>
-        <strong>Status:</strong>
-        <span class="badge {% if order.status == 'paid' %}badge-paid{% else %}badge-pending{% endif %}">
-          {{ order.status }}
-        </span>
-      </p>
+  <div class="card">
+    <h2 class="section-title">Order #{{ order.id }}</h2>
+    
+    <div style="margin: 1.5rem 0; padding: 1rem; background: #f0f9ff; border-left: 4px solid #3b82f6; border-radius: 8px;">
+      <strong>📧 Delivery Email:</strong> {{ user.email }} <br>
+      <span style="color: #6b7280; font-size: 0.9rem;">
+        Your product/service will be sent to this email after payment is confirmed by admin.
+        <br><strong>Tip:</strong> If you don't see our email, check Spam/Junk folder.
+      </span>
     </div>
 
-    {% if order.status != 'paid' %}
-    <hr style="margin:1.4rem 0; border:none; border-top:1px solid #e5e7eb;">
-
-    <h3 style="margin-bottom:0.6rem; font-size:1.1rem;">Pay with Bitcoin</h3>
-    <p style="font-size:0.92rem; color:#6b7280; margin-bottom:1rem; line-height:1.5;">
-      Send <strong>exactly {{ "%.8f"|format(order.amount_btc) }} BTC</strong> to the address below.
-      After sending, paste the transaction ID and click the button.
-      An admin will verify the payment and unlock your download.
-    </p>
-
-    <div class="btc-box">
-      {{ bitcoin_address }}
+    <div style="margin-bottom: 1rem;">
+      <strong>Product:</strong> {{ order.product.title }} <br>
+      <strong>Amount:</strong> ${{ "%.2f"|format(order.amount_usd) }} <br>
+      <strong>Status:</strong> 
+      <span class="badge {% if order.status == 'paid' %}badge-paid{% else %}badge-pending{% endif %}">
+        {{ order.status|capitalize }}
+      </span>
     </div>
 
-    <form method="post" action="/order/{{ order.id }}/confirm" style="margin-top:1.2rem;">
+    {% if order.status == 'pending' %}
+    <form method="post" action="/order/{{ order.id }}/confirm">
       <div class="form-group">
-        <label>Bitcoin Transaction ID (recommended)</label>
-        <input type="text" name="tx_id" placeholder="e.g. a1b2c3d4e5f6..." value="{{ order.tx_id or '' }}">
+        <label>Payment Proof / Notes</label>
+        <textarea name="notes" rows="3" placeholder="e.g. I paid via bank transfer. Transaction ref: 12345"></textarea>
       </div>
-      <button type="submit" class="btn btn-orange btn-full">
-        I have sent the payment
-      </button>
+      <button type="submit" class="btn btn-orange">I Have Paid</button>
     </form>
-    {% else %}
-    <div class="success-box" style="margin-top:1.4rem;">
-      <strong>Payment confirmed!</strong><br>
+    
+    <p style="margin-top: 1rem; color: #6b7280; font-size: 0.9rem;">
+      After you click "I Have Paid", admin will confirm and your download link will appear here.
+    </p>
+    {% endif %}
+
+    {% if order.status == 'paid' %}
       {% if order.product.file_path %}
-        You can now download your file.
-        <div style="margin-top:0.9rem;">
-          <a href="/download/{{ order.id }}" class="btn btn-blue">Download File</a>
-        </div>
+        <a href="/download/{{ order.id }}" class="btn btn-blue">Download Product</a>
       {% else %}
-        This is a service product. The admin will contact you shortly.
+        <p style="color: #16a34a; font-weight: 600;">✓ Payment Confirmed. Check your email: {{ user.email }} for delivery.</p>
       {% endif %}
-    </div>
     {% endif %}
   </div>
 
