@@ -10,7 +10,7 @@ from .config import settings
 
 app = FastAPI(title=settings.SITE_NAME)
 
-app.mount("/static", StaticFiles(directory="static"), name="static")
+app.mount("/static", StaticFiles(directory="app/static"), name="static")
 templates = Jinja2Templates(directory="templates")
 
 def render(request: Request, name: str, context: dict = None, user=None):
