@@ -36,9 +36,9 @@ class Order(Base):
     user_id = Column(Integer, ForeignKey("users.id"), nullable=False)
     product_id = Column(Integer, ForeignKey("products.id"), nullable=False)
     amount_usd = Column(Float, nullable=False)
-    status = Column(String, default="pending")  # pending | paid | credited
+    status = Column(String, default="pending")      # pending | paid | credited
     notes = Column(String, nullable=True)
-    payment_type = Column(String, default="btc")  # btc | credits
+    payment_type = Column(String, default="btc")    # btc | credits
     created_at = Column(DateTime, default=datetime.utcnow)
 
     user = relationship("User", back_populates="orders")
