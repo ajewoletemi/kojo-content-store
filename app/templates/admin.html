@@ -3,93 +3,80 @@
 
 {% block content %}
 <div class="container">
+  
+  <h2 class="section-title">Admin Panel</h2>
 
-  <div style="margin-bottom: 2rem;">
-    <h2 class="section-title">Admin Panel</h2>
-    <p style="color:#6b7280; margin-top:0.3rem;">Manage products and confirm payments.</p>
-  </div>
-
-  <!-- Upload New Product -->
-  <div class="card" style="margin-bottom:2.5rem;">
-    <h3 style="margin-bottom:1.2rem; font-size:1.15rem;">Upload New Product</h3>
-
+  <div class="card" style="margin-bottom: 2rem;">
+    <h3>Upload New Product</h3>
     <form method="post" action="/admin/upload" enctype="multipart/form-data">
-      <div class="two-col" style="margin-bottom:0.2rem;">
-        <div class="form-group">
-          <label>Title *</label>
-          <input type="text" name="title" required placeholder="e.g. Premium PDF Guide">
-        </div>
-        <div class="form-group">
-          <label>Category *</label>
-          <select name="category">
-            <option value="document">Document</option>
-            <option value="software">Windows Software</option>
-            <option value="service">Service</option>
-          </select>
-        </div>
+      <div class="form-group">
+        <label>Title</label>
+        <input type="text" name="title" placeholder="e.g. Facebook Ads Guide 2026" required>
+      </div>
+      
+      <div class="form-group">
+        <label>Category</label>
+        <select name="category">
+          <option value="document">Document</option>
+          <option value="software">Software</option>
+          <option value="service">Service</option>
+        </select>
       </div>
 
       <div class="form-group">
         <label>Description</label>
-        <textarea name="description" rows="3" placeholder="Short description of the product..."></textarea>
+        <textarea name="description" rows="3" placeholder="What is this product about?"></textarea>
       </div>
 
-      <div class="two-col">
-        <div class="form-group">
-          <label>Price (USD) *</label>
-          <input type="number" name="price_usd" step="0.01" min="0" required placeholder="50.00">
-        </div>
-        <div class="form-group">
-          <label>File (optional for services)</label>
-          <input type="file" name="file">
-        </div>
+      <div class="form-group">
+        <label>Price USD</label>
+        <input type="number" step="0.01" name="price_usd" placeholder="25.00" required>
       </div>
 
-      <button type="submit" class="btn btn-orange" style="margin-top:0.5rem;">
-        Upload Product
-      </button>
+      <div class="form-group">
+        <label>Image URL (optional)</label>
+        <input type="text" name="image_url" placeholder="https://imgur.com/yourimage.jpg">
+        <span style="font-size: 0.85rem; color: #6b7280;">Upload image to imgur.com and paste link here</span>
+      </div>
+
+      <div class="form-group">
+        <label>File Upload (leave empty for Services)</label>
+        <input type="file" name="file">
+      </div>
+
+      <button type="submit" class="btn btn-orange">Upload Product</button>
     </form>
   </div>
 
-  <!-- All Products -->
-  <h3 class="section-title" style="font-size:1.15rem; margin-bottom:0.8rem;">All Products</h3>
-
-  <div class="card" style="overflow-x:auto; margin-bottom:2.5rem; padding:0;">
+  <div class="card" style="margin-bottom: 2rem;">
+    <h3>Products ({{ products|length }})</h3>
     <table>
       <thead>
         <tr>
           <th>ID</th>
           <th>Title</th>
           <th>Category</th>
-          <th>Price (USD)</th>
+          <th>Price</th>
           <th>Status</th>
-          <th style="text-align:right;">Action</th>
+          <th>Action</th>
         </tr>
       </thead>
       <tbody>
         {% for p in products %}
         <tr>
           <td>{{ p.id }}</td>
-          <td><strong>{{ p.title }}</strong></td>
+          <td>{{ p.title }}</td>
           <td>{{ p.category|capitalize }}</td>
           <td>${{ "%.2f"|format(p.price_usd) }}</td>
           <td>
-            <span class="badge {% if p.is_active %}badge-paid{% else %}badge-hidden{% endif %}">
-              {{ "Active" if p.is_active else "Hidden" }}
-            </span>
+            {% if p.is_active %}<span class="badge badge-paid">Active</span>{% else %}<span class="badge badge-pending">Hidden</span>{% endif %}
           </td>
-          <td style="text-align:right;">
+          <td>
             <form method="post" action="/admin/toggle/{{ p.id }}" style="display:inline;">
-              <button class="btn btn-outline btn-sm">
-                {{ "Hide" if p.is_active else "Show" }}
+              <button type="submit" class="btn" style="padding: 0.4rem 0.8rem; font-size: 0.85rem;">
+                {% if p.is_active %}Hide{% else %}Show{% endif %}
               </button>
             </form>
-          </td>
-        </tr>
-        {% else %}
-        <tr>
-          <td colspan="6" style="text-align:center; padding:2rem; color:#6b7280;">
-            No products uploaded yet.
           </td>
         </tr>
         {% endfor %}
@@ -97,51 +84,37 @@
     </table>
   </div>
 
-  <!-- Recent Orders -->
-  <h3 class="section-title" style="font-size:1.15rem; margin-bottom:0.8rem;">Recent Orders</h3>
-
-  <div class="card" style="overflow-x:auto; padding:0;">
+  <div class="card">
+    <h3>Recent Orders ({{ orders|length }})</h3>
     <table>
       <thead>
         <tr>
-          <th>Order</th>
-          <th>User</th>
+          <th>Order ID</th>
+          <th>Customer Email</th>
           <th>Product</th>
           <th>Amount</th>
-          <th>Notes</th>
           <th>Status</th>
-          <th style="text-align:right;">Action</th>
+          <th>Action</th>
         </tr>
       </thead>
       <tbody>
         {% for o in orders %}
         <tr>
-          <td><strong>#{{ o.id }}</strong></td>
+          <td>#{{ o.id }}</td>
           <td>{{ o.user.email }}</td>
           <td>{{ o.product.title }}</td>
           <td>${{ "%.2f"|format(o.amount_usd) }}</td>
-          <td style="max-width:160px; overflow:hidden; text-overflow:ellipsis; white-space:nowrap;">
-            {{ o.notes or "—" }}
+          <td>
+            {% if o.status == 'paid' %}<span class="badge badge-paid">Paid</span>{% else %}<span class="badge badge-pending">Pending</span>{% endif %}
           </td>
           <td>
-            <span class="badge {% if o.status == 'paid' %}badge-paid{% else %}badge-pending{% endif %}">
-              {{ o.status }}
-            </span>
-          </td>
-          <td style="text-align:right;">
-            {% if o.status != 'paid' %}
+            {% if o.status == 'pending' %}
             <form method="post" action="/admin/order/{{ o.id }}/mark-paid" style="display:inline;">
-              <button class="btn btn-blue btn-sm">Mark Paid</button>
+              <button type="submit" class="btn btn-blue" style="padding: 0.4rem 0.8rem; font-size: 0.85rem;">Mark Paid</button>
             </form>
             {% else %}
-            <span style="color:#16a34a; font-size:0.85rem;">✓ Paid</span>
+            -
             {% endif %}
-          </td>
-        </tr>
-        {% else %}
-        <tr>
-          <td colspan="7" style="text-align:center; padding:2rem; color:#6b7280;">
-            No orders yet.
           </td>
         </tr>
         {% endfor %}
