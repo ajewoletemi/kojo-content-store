@@ -37,15 +37,18 @@ BITCOIN_ADDRESS = os.getenv("BITCOIN_ADDRESS", "bc1qxy2kgdygjrsqtzq2n0yrf2493p83
 ADMIN_EMAIL = os.getenv("ADMIN_EMAIL", "admin@example.com")
 ADMIN_PASSWORD = os.getenv("ADMIN_PASSWORD", "ChangeMe123!")
 
-# SMTP settings
+# SMTP settings (Gmail)
 SMTP_EMAIL = os.getenv("SMTP_EMAIL")
 SMTP_PASSWORD = os.getenv("SMTP_PASSWORD")
 SMTP_HOST = "smtp.gmail.com"
 SMTP_PORT = 587
 
+# Your live website
+SITE_URL = "https://kojo-content-store.onrender.com"
+
 
 def send_email(to_email: str, subject: str, body: str):
-    """Send a simple email using the SMTP credentials"""
+    """Send email using Gmail SMTP"""
     if not SMTP_EMAIL or not SMTP_PASSWORD:
         print("⚠️ SMTP_EMAIL or SMTP_PASSWORD not set – email not sent")
         return False
@@ -239,7 +242,7 @@ async def buy_product(
         db.refresh(order)
         return RedirectResponse(f"/order/{order.id}?success=credits", status_code=303)
 
-    # Otherwise create pending BTC order
+    # Create pending BTC order
     order = Order(
         user_id=user.id,
         product_id=product.id,
@@ -381,13 +384,13 @@ async def mark_paid(
     user=Depends(require_admin),
     db: Session = Depends(get_db)
 ):
-    """Mark order as paid + send email to buyer"""
+    """Mark order as paid + send confirmation email"""
     order = db.query(Order).filter(Order.id == order_id).first()
     if order and order.status == "pending":
         order.status = "paid"
         db.commit()
 
-        # Send email to the buyer
+        # Send email to buyer
         buyer_email = order.user.email
         product_title = order.product.title
 
@@ -400,7 +403,7 @@ Order ID: #{order.id}
 Amount: ${order.amount_usd:.2f}
 
 You can now download your product from your dashboard:
-https://your-app-name.onrender.com/dashboard
+{SITE_URL}/dashboard
 
 Thank you for shopping with {SITE_NAME}!
 """
@@ -425,13 +428,14 @@ async def add_as_credit(
             order.notes = (order.notes or "") + " | Added as Store Credit"
             db.commit()
 
-            # Optional email notification
+            # Send email notification
             subject = f"Store Credit added – {SITE_NAME}"
             body = f"""Hello,
 
 We have added ${order.amount_usd:.2f} to your Store Credit balance.
 
-You can now use this credit to buy products on the store.
+You can now use this credit to buy products on the store:
+{SITE_URL}/dashboard
 
 Thank you!
 {SITE_NAME}
