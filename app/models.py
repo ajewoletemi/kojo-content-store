@@ -12,7 +12,6 @@ class User(Base):
     is_admin = Column(Boolean, default=False)
     is_active = Column(Boolean, default=True)
     created_at = Column(DateTime, default=datetime.utcnow)
-
     orders = relationship("Order", back_populates="user")
 
 class Product(Base):
@@ -21,11 +20,11 @@ class Product(Base):
     title = Column(String, nullable=False)
     description = Column(Text, default="")
     category = Column(String, default="document")  # document | software | service
-    price_usd = Column(Float, nullable=False)  # USD ONLY
+    price_usd = Column(Float, nullable=False)
+    image_url = Column(String, nullable=True)  # NEW: for product picture
     file_path = Column(String, nullable=True)
     is_active = Column(Boolean, default=True)
     created_at = Column(DateTime, default=datetime.utcnow)
-
     orders = relationship("Order", back_populates="product")
 
 class Order(Base):
@@ -33,10 +32,9 @@ class Order(Base):
     id = Column(Integer, primary_key=True, index=True)
     user_id = Column(Integer, ForeignKey("users.id"), nullable=False)
     product_id = Column(Integer, ForeignKey("products.id"), nullable=False)
-    amount_usd = Column(Float, nullable=False)  # USD ONLY
+    amount_usd = Column(Float, nullable=False)
     status = Column(String, default="pending")  # pending | paid
-    notes = Column(String, nullable=True)  # for payment proof instead of tx_id
+    notes = Column(String, nullable=True)
     created_at = Column(DateTime, default=datetime.utcnow)
-
     user = relationship("User", back_populates="orders")
     product = relationship("Product", back_populates="orders")
