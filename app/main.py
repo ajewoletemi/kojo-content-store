@@ -43,7 +43,8 @@ def create_admin_if_needed(db: Session):
                 email=ADMIN_EMAIL,
                 hashed_password=get_password_hash(ADMIN_PASSWORD),
                 full_name="Admin",
-                is_admin=True
+                is_admin=True,
+                credits=0.0
             )
             db.add(admin)
             db.commit()
@@ -134,7 +135,8 @@ async def register(
     user = User(
         email=email,
         hashed_password=get_password_hash(password),
-        full_name=full_name
+        full_name=full_name,
+        credits=0.0
     )
     db.add(user)
     db.commit()
@@ -167,7 +169,12 @@ async def dashboard(
 ):
     products = db.query(Product).filter(Product.is_active == True).order_by(Product.created_at.desc()).all()
     orders = db.query(Order).filter(Order.user_id == user.id).order_by(Order.created_at.desc()).all()
-    return render(request, "dashboard.html", {"products": products, "orders": orders}, user=user)
+    return render(
+        request,
+        "dashboard.html",
+        {"products": products, "orders": orders, "credits": user.credits or 0.0},
+        user=user
+    )
 
 
 # ==================== BUY / ORDER ====================
@@ -182,11 +189,29 @@ async def buy_product(
     if not product:
         raise HTTPException(status_code=404, detail="Product not found")
 
+    # If user has enough store credit → pay with credits immediately
+    if (user.credits or 0) >= product.price_usd:
+        user.credits = (user.credits or 0) - product.price_usd
+        order = Order(
+            user_id=user.id,
+            product_id=product.id,
+            amount_usd=product.price_usd,
+            status="paid",
+            payment_type="credits",
+            notes="Paid with Store Credit"
+        )
+        db.add(order)
+        db.commit()
+        db.refresh(order)
+        return RedirectResponse(f"/order/{order.id}?success=credits", status_code=303)
+
+    # Not enough credit → create pending BTC order
     order = Order(
         user_id=user.id,
         product_id=product.id,
         amount_usd=product.price_usd,
-        status="pending"
+        status="pending",
+        payment_type="btc"
     )
     db.add(order)
     db.commit()
@@ -205,10 +230,15 @@ async def order_page(
     if not order:
         raise HTTPException(status_code=404, detail="Order not found")
 
+    success = request.query_params.get("success")
     return render(
         request,
         "order.html",
-        {"order": order, "bitcoin_address": BITCOIN_ADDRESS},
+        {
+            "order": order,
+            "bitcoin_address": BITCOIN_ADDRESS,
+            "success": success
+        },
         user=user
     )
 
@@ -224,11 +254,11 @@ async def confirm_payment(
     if not order:
         raise HTTPException(status_code=404, detail="Order not found")
 
-    if order.status != "paid":
-        order.notes = notes.strip() or order.notes
+    if order.status == "pending":
+        order.notes = notes.strip() or order.notes or "User clicked I have paid"
         db.commit()
 
-    return RedirectResponse(f"/order/{order_id}", status_code=303)
+    return RedirectResponse(f"/order/{order_id}?submitted=1", status_code=303)
 
 
 @app.get("/download/{order_id}")
@@ -317,10 +347,29 @@ async def mark_paid(
     user=Depends(require_admin),
     db: Session = Depends(get_db)
 ):
+    """Mark order as paid and deliver the product"""
     order = db.query(Order).filter(Order.id == order_id).first()
-    if order:
+    if order and order.status == "pending":
         order.status = "paid"
         db.commit()
+    return RedirectResponse("/admin", status_code=303)
+
+
+@app.post("/admin/order/{order_id}/add-credit")
+async def add_as_credit(
+    order_id: int,
+    user=Depends(require_admin),
+    db: Session = Depends(get_db)
+):
+    """Confirm BTC payment and add the amount as Store Credit instead of delivering product"""
+    order = db.query(Order).filter(Order.id == order_id).first()
+    if order and order.status == "pending":
+        buyer = db.query(User).filter(User.id == order.user_id).first()
+        if buyer:
+            buyer.credits = (buyer.credits or 0) + order.amount_usd
+            order.status = "credited"
+            order.notes = (order.notes or "") + " | Added as Store Credit"
+            db.commit()
     return RedirectResponse("/admin", status_code=303)
 
 
