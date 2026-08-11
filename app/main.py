@@ -19,19 +19,6 @@ from .auth import (
 )
 
 Base.metadata.create_all(bind=engine)
-
-# TRIAL FIX: Delete old DB if migration fails
-DB_PATH = Path("app/kojo_store.db")
-if DB_PATH.exists():
-    try:
-        db = next(get_db())
-        db.execute(text("SELECT image_url FROM products LIMIT 1"))
-        db.close()
-    except:
-        print("⚠️ Old DB detected. Deleting and recreating...")
-        DB_PATH.unlink()
-        Base.metadata.create_all(bind=engine)
-
 app = FastAPI(title="Kojo Tools Store")
 
 app.mount("/static", StaticFiles(directory="app/static"), name="static")
@@ -70,21 +57,27 @@ def create_admin_if_needed(db: Session):
         print(f"⚠️ Could not create/check admin: {e}")
         db.rollback()
 
+def safe_execute(db, sql):
+    try:
+        db.execute(text(sql))
+        db.commit()
+    except Exception as e:
+        db.rollback()
+        print(f"ℹ️ Migration skipped: {e}")
+
 @app.on_event("startup")
 def startup():
     db = next(get_db())
-    try:
-        db.execute(text("ALTER TABLE products RENAME COLUMN price_btc TO price_usd"))
-        db.execute(text("ALTER TABLE products ADD COLUMN IF NOT EXISTS image_url VARCHAR"))
-        db.execute(text("ALTER TABLE products DROP COLUMN IF EXISTS price_usd_approx"))
-        db.execute(text("ALTER TABLE orders RENAME COLUMN amount_btc TO amount_usd"))
-        db.execute(text("ALTER TABLE orders RENAME COLUMN tx_id TO notes"))
-        db.commit()
-        print("✅ DB Migrated to USD + Image")
-    except Exception as e:
-        db.rollback()
-        print(f"ℹ️ DB already migrated or new: {e}")
+    print("🔄 Running DB Migrations...")
     
+    # Safe migrations - won't crash if column already renamed
+    safe_execute(db, "ALTER TABLE products RENAME COLUMN price_btc TO price_usd")
+    safe_execute(db, "ALTER TABLE products ADD COLUMN IF NOT EXISTS image_url VARCHAR")
+    safe_execute(db, "ALTER TABLE products DROP COLUMN IF EXISTS price_usd_approx")
+    safe_execute(db, "ALTER TABLE orders RENAME COLUMN amount_btc TO amount_usd")
+    safe_execute(db, "ALTER TABLE orders RENAME COLUMN tx_id TO notes")
+    
+    print("✅ DB Migration Check Done")
     create_admin_if_needed(db)
     db.close()
 
@@ -206,21 +199,10 @@ async def mark_paid(order_id: int, background_tasks: BackgroundTasks, user=Depen
     if order: 
         order.status = "paid"
         db.commit()
-        # OPTION C: Auto-email customer with Spam note
         if order.product.file_path:
-            body = f"""Thanks! Your payment for '{order.product.title}' is confirmed.
-
-Download here: https://your-site.com/download/{order.id}
-
-Can't find the email? Please check your Spam/Junk/Promotions folder.
-"""
+            body = f"""Thanks! Your payment for '{order.product.title}' is confirmed.\n\nDownload here: https://your-site.com/download/{order.id}\n\nCan't find the email? Please check your Spam/Junk/Promotions folder."""
         else:
-            body = f"""Thanks, we received your payment. 
-
-We will deliver your '{order.product.title}' to this email within 24hrs.
-
-Can't find our emails? Please check your Spam/Junk/Promotions folder and add us to your contacts.
-"""
+            body = f"""Thanks, we received your payment. \n\nWe will deliver your '{order.product.title}' to this email within 24hrs.\n\nCan't find our emails? Please check your Spam/Junk/Promotions folder and add us to your contacts."""
         background_tasks.add_task(send_email, order.user.email, f"Order #{order.id} Confirmed - {SITE_NAME}", body)
     return RedirectResponse("/admin", status_code=303)
 
