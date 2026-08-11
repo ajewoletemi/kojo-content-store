@@ -11,7 +11,9 @@ class User(Base):
     full_name = Column(String, default="")
     is_admin = Column(Boolean, default=False)
     is_active = Column(Boolean, default=True)
+    credits = Column(Float, default=0.0)          # Store Credit balance
     created_at = Column(DateTime, default=datetime.utcnow)
+
     orders = relationship("Order", back_populates="user")
 
 class Product(Base):
@@ -21,10 +23,11 @@ class Product(Base):
     description = Column(Text, default="")
     category = Column(String, default="document")  # document | software | service
     price_usd = Column(Float, nullable=False)
-    image_url = Column(String, nullable=True)  # NEW: for product picture
+    image_url = Column(String, nullable=True)
     file_path = Column(String, nullable=True)
     is_active = Column(Boolean, default=True)
     created_at = Column(DateTime, default=datetime.utcnow)
+
     orders = relationship("Order", back_populates="product")
 
 class Order(Base):
@@ -33,8 +36,10 @@ class Order(Base):
     user_id = Column(Integer, ForeignKey("users.id"), nullable=False)
     product_id = Column(Integer, ForeignKey("products.id"), nullable=False)
     amount_usd = Column(Float, nullable=False)
-    status = Column(String, default="pending")  # pending | paid
+    status = Column(String, default="pending")  # pending | paid | credited
     notes = Column(String, nullable=True)
+    payment_type = Column(String, default="btc")  # btc | credits
     created_at = Column(DateTime, default=datetime.utcnow)
+
     user = relationship("User", back_populates="orders")
     product = relationship("Product", back_populates="orders")
