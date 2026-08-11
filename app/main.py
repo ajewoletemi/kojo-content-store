@@ -6,6 +6,9 @@ from sqlalchemy.orm import Session
 import os
 import shutil
 import uuid
+import smtplib
+from email.mime.text import MIMEText
+from email.mime.multipart import MIMEMultipart
 from pathlib import Path
 
 from .database import engine, Base, get_db
@@ -33,6 +36,37 @@ SITE_NAME = os.getenv("SITE_NAME", "Kojo Tools Store")
 BITCOIN_ADDRESS = os.getenv("BITCOIN_ADDRESS", "bc1qxy2kgdygjrsqtzq2n0yrf2493p83kkfjhx0wlh")
 ADMIN_EMAIL = os.getenv("ADMIN_EMAIL", "admin@example.com")
 ADMIN_PASSWORD = os.getenv("ADMIN_PASSWORD", "ChangeMe123!")
+
+# SMTP settings
+SMTP_EMAIL = os.getenv("SMTP_EMAIL")
+SMTP_PASSWORD = os.getenv("SMTP_PASSWORD")
+SMTP_HOST = "smtp.gmail.com"
+SMTP_PORT = 587
+
+
+def send_email(to_email: str, subject: str, body: str):
+    """Send a simple email using the SMTP credentials"""
+    if not SMTP_EMAIL or not SMTP_PASSWORD:
+        print("⚠️ SMTP_EMAIL or SMTP_PASSWORD not set – email not sent")
+        return False
+
+    try:
+        msg = MIMEMultipart()
+        msg["From"] = SMTP_EMAIL
+        msg["To"] = to_email
+        msg["Subject"] = subject
+        msg.attach(MIMEText(body, "plain"))
+
+        with smtplib.SMTP(SMTP_HOST, SMTP_PORT) as server:
+            server.starttls()
+            server.login(SMTP_EMAIL, SMTP_PASSWORD)
+            server.send_message(msg)
+
+        print(f"✅ Email sent to {to_email}")
+        return True
+    except Exception as e:
+        print(f"❌ Failed to send email: {e}")
+        return False
 
 
 def create_admin_if_needed(db: Session):
@@ -189,7 +223,7 @@ async def buy_product(
     if not product:
         raise HTTPException(status_code=404, detail="Product not found")
 
-    # If user has enough store credit → pay with credits immediately
+    # Pay with Store Credit if enough balance
     if (user.credits or 0) >= product.price_usd:
         user.credits = (user.credits or 0) - product.price_usd
         order = Order(
@@ -205,7 +239,7 @@ async def buy_product(
         db.refresh(order)
         return RedirectResponse(f"/order/{order.id}?success=credits", status_code=303)
 
-    # Not enough credit → create pending BTC order
+    # Otherwise create pending BTC order
     order = Order(
         user_id=user.id,
         product_id=product.id,
@@ -347,11 +381,31 @@ async def mark_paid(
     user=Depends(require_admin),
     db: Session = Depends(get_db)
 ):
-    """Mark order as paid and deliver the product"""
+    """Mark order as paid + send email to buyer"""
     order = db.query(Order).filter(Order.id == order_id).first()
     if order and order.status == "pending":
         order.status = "paid"
         db.commit()
+
+        # Send email to the buyer
+        buyer_email = order.user.email
+        product_title = order.product.title
+
+        subject = f"Your order #{order.id} is confirmed – {SITE_NAME}"
+        body = f"""Hello,
+
+Your payment for "{product_title}" has been confirmed.
+
+Order ID: #{order.id}
+Amount: ${order.amount_usd:.2f}
+
+You can now download your product from your dashboard:
+https://your-app-name.onrender.com/dashboard
+
+Thank you for shopping with {SITE_NAME}!
+"""
+        send_email(buyer_email, subject, body)
+
     return RedirectResponse("/admin", status_code=303)
 
 
@@ -361,7 +415,7 @@ async def add_as_credit(
     user=Depends(require_admin),
     db: Session = Depends(get_db)
 ):
-    """Confirm BTC payment and add the amount as Store Credit instead of delivering product"""
+    """Confirm BTC payment and add the amount as Store Credit"""
     order = db.query(Order).filter(Order.id == order_id).first()
     if order and order.status == "pending":
         buyer = db.query(User).filter(User.id == order.user_id).first()
@@ -370,6 +424,20 @@ async def add_as_credit(
             order.status = "credited"
             order.notes = (order.notes or "") + " | Added as Store Credit"
             db.commit()
+
+            # Optional email notification
+            subject = f"Store Credit added – {SITE_NAME}"
+            body = f"""Hello,
+
+We have added ${order.amount_usd:.2f} to your Store Credit balance.
+
+You can now use this credit to buy products on the store.
+
+Thank you!
+{SITE_NAME}
+"""
+            send_email(buyer.email, subject, body)
+
     return RedirectResponse("/admin", status_code=303)
 
 
