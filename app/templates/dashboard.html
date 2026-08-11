@@ -1,34 +1,112 @@
 {% extends "base.html" %}
+{% block title %}Dashboard · {{ site_name }}{% endblock %}
+
 {% block content %}
-<div class="container mx-auto px-4 py-8">
-    <h1 class="text-3xl font-bold mb-6">Dashboard</h1>
-    <p class="mb-6">Welcome back, {{ user.username }}!</p>
+<div class="container">
 
-    <h2 class="text-2xl font-semibold mb-4">Your Products</h2>
-    <div class="grid grid-cols-1 md:grid-cols-3 gap-6 mb-10">
+  <h1 class="section-title">Dashboard</h1>
+  <p class="section-sub">Welcome back, {{ user.full_name or user.email }}!</p>
+
+  <!-- PRODUCTS SECTION -->
+  <h2 class="section-title" style="margin-top: 2rem;">Available Products</h2>
+  <p class="section-sub">Browse and purchase tools, documents and software</p>
+
+  {% if products %}
+  <div class="grid">
     {% for product in products %}
-        <div class="bg-white p-4 rounded-lg shadow">
-            <img src="{{ product.image_url or '/static/placeholder.png' }}" class="w-full h-40 object-cover rounded mb-2">
-            <h3 class="font-bold">{{ product.name }}</h3>
-            <p class="text-gray-600">${{ "%.2f"|format(product.price_usd) }}</p>
-            <a href="#" class="mt-2 inline-block bg-green-500 text-white px-4 py-2 rounded">Buy Now</a>
-        </div>
-    {% endfor %}
-    </div>
+    <div class="card product-card">
+      
+      <!-- Product Image (wide but proportional) -->
+      <div style="width: 100%; aspect-ratio: 16/10; overflow: hidden; border-radius: 10px; background: #f1f5f9; margin-bottom: 1rem;">
+        {% if product.image_url %}
+          <img src="{{ product.image_url }}" 
+               alt="{{ product.title }}"
+               style="width: 100%; height: 100%; object-fit: cover; display: block;">
+        {% else %}
+          <div style="width: 100%; height: 100%; display: flex; align-items: center; justify-content: center; color: #94a3b8; font-size: 0.9rem;">
+            No image
+          </div>
+        {% endif %}
+      </div>
 
-    <h2 class="text-2xl font-semibold mb-4">Order History</h2>
-    <table class="w-full bg-white rounded-lg shadow">
-        <thead><tr><th class="p-2">Product</th><th class="p-2">Amount</th><th class="p-2">Notes</th><th class="p-2">Status</th></tr></thead>
-        <tbody>
+      <!-- Category -->
+      <span class="category">{{ product.category|capitalize }}</span>
+
+      <!-- Title -->
+      <h3>{{ product.title }}</h3>
+
+      <!-- Description -->
+      {% if product.description %}
+      <p class="desc">{{ product.description }}</p>
+      {% endif %}
+
+      <!-- Price + Buy Button -->
+      <div style="display: flex; justify-content: space-between; align-items: center; margin-top: auto; gap: 0.75rem;">
+        <div class="price">${{ "%.2f"|format(product.price_usd) }}</div>
+        
+        <form method="post" action="/buy/{{ product.id }}" style="margin: 0;">
+          <button type="submit" class="btn btn-blue">
+            Buy Now
+          </button>
+        </form>
+      </div>
+
+    </div>
+    {% endfor %}
+  </div>
+  {% else %}
+  <div class="card" style="text-align: center; padding: 2.5rem; color: #64748b;">
+    No products available yet.
+  </div>
+  {% endif %}
+
+
+  <!-- ORDER HISTORY -->
+  <h2 class="section-title" style="margin-top: 3rem;">Order History</h2>
+  <p class="section-sub">Your past purchases</p>
+
+  <div class="card" style="overflow-x: auto;">
+    {% if orders %}
+    <table>
+      <thead>
+        <tr>
+          <th>Product</th>
+          <th>Amount</th>
+          <th>Notes</th>
+          <th>Status</th>
+          <th>Action</th>
+        </tr>
+      </thead>
+      <tbody>
         {% for order in orders %}
-            <tr>
-                <td class="p-2">{{ order.product.name }}</td>
-                <td class="p-2">${{ "%.2f"|format(order.amount_usd) }}</td>
-                <td class="p-2">{{ order.notes }}</td>
-                <td class="p-2">{{ order.status }}</td>
-            </tr>
+        <tr>
+          <td>{{ order.product.title }}</td>
+          <td>${{ "%.2f"|format(order.amount_usd) }}</td>
+          <td>{{ order.notes or "—" }}</td>
+          <td>
+            {% if order.status == "paid" %}
+              <span class="badge badge-paid">Paid</span>
+            {% else %}
+              <span class="badge badge-pending">Pending</span>
+            {% endif %}
+          </td>
+          <td>
+            {% if order.status == "paid" and order.product.file_path %}
+              <a href="/download/{{ order.id }}" class="btn btn-sm btn-blue">Download</a>
+            {% elif order.status == "pending" %}
+              <a href="/order/{{ order.id }}" class="btn btn-sm btn-outline">View Order</a>
+            {% else %}
+              —
+            {% endif %}
+          </td>
+        </tr>
         {% endfor %}
-        </tbody>
+      </tbody>
     </table>
+    {% else %}
+    <p style="color: #64748b; text-align: center; padding: 1.5rem;">No orders yet.</p>
+    {% endif %}
+  </div>
+
 </div>
 {% endblock %}
