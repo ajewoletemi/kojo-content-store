@@ -20,7 +20,7 @@ connect_args = {}
 if DATABASE_URL.startswith("sqlite"):
     connect_args = {"check_same_thread": False}
 else:
-    # Works with both psycopg2 and Supabase pooler
+    # Works correctly with psycopg2-binary + Supabase
     connect_args = {
         "sslmode": "require",
         "connect_timeout": 15,
@@ -32,7 +32,7 @@ engine_kwargs = {
     "connect_args": connect_args,
 }
 
-# Recommended for Supabase transaction/session pooler
+# Important for Supabase pooler (port 6543)
 if "pooler.supabase.com" in DATABASE_URL or ":6543" in DATABASE_URL:
     engine_kwargs["poolclass"] = NullPool
 
