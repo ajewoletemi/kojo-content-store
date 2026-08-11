@@ -20,7 +20,7 @@ Base.metadata.create_all(bind=engine)
 
 app = FastAPI(title="Kojo Tools Store")
 
-# Static files & templates (correct path)
+# Static files & templates
 app.mount("/static", StaticFiles(directory="app/static"), name="static")
 templates = Jinja2Templates(directory="app/templates")
 
@@ -105,7 +105,7 @@ async def login(
         key="access_token",
         value=token,
         httponly=True,
-        max_age=60 * 60 * 24 * 7  # 7 days
+        max_age=60 * 60 * 24 * 7
     )
     return response
 
@@ -270,6 +270,7 @@ async def admin_upload(
     category: str = Form("document"),
     description: str = Form(""),
     price_usd: float = Form(...),
+    image_url: str = Form(""),
     file: UploadFile = File(None),
     user=Depends(require_admin),
     db: Session = Depends(get_db)
@@ -288,6 +289,7 @@ async def admin_upload(
         description=description,
         category=category,
         price_usd=price_usd,
+        image_url=image_url.strip() or None,
         file_path=file_path,
         is_active=True
     )
