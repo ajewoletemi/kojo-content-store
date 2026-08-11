@@ -1,36 +1,18 @@
-<!DOCTYPE html>
-<html lang="en">
-<head>
-  <meta charset="UTF-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>{{ site_name }}</title>
-  <link rel="stylesheet" href="/static/css/style.css">
-</head>
-<body>
-  <header class="header">
-    <div class="logo">Kojo <span class="rest">Tools Store</span></div>
-    <nav class="nav">
-      <a href="/login">Login</a>
-      <a href="/register" class="btn btn-blue btn-sm">Get Started</a>
-    </nav>
-  </header>
-
-  <div class="container" style="text-align:center; padding-top:4.5rem; padding-bottom:5rem;">
-    <h1 class="section-title" style="font-size:2.2rem; margin-bottom:0.6rem;">
-      Premium Digital Content
-    </h1>
-    <p class="section-sub" style="max-width:520px; margin:0 auto 2.2rem; font-size:1.05rem;">
-      Buy documents, Windows software & services.<br>
-      Secure payments with <strong>Bitcoin</strong>.
-    </p>
-    <div style="display:flex; gap:1rem; justify-content:center; flex-wrap:wrap;">
-      <a href="/register" class="btn btn-orange">Create Free Account</a>
-      <a href="/login" class="btn btn-outline">Sign In</a>
+{% extends "base.html" %}
+{% block content %}
+<div class="container mx-auto px-4 py-12 text-center">
+    <h1 class="text-4xl font-bold mb-4">Welcome to {{ site_name }}</h1>
+    <p class="text-lg mb-8">Premium Digital Tools & Templates</p>
+    
+    <div class="grid grid-cols-1 md:grid-cols-3 gap-6">
+    {% for product in products %}
+        <div class="bg-white p-6 rounded-lg shadow">
+            <img src="{{ product.image_url or '/static/placeholder.png' }}" class="w-full h-48 object-cover rounded mb-4">
+            <h3 class="text-xl font-bold">{{ product.name }}</h3>
+            <p class="text-gray-600 my-2">{{ product.description }}</p>
+            <p class="text-2xl font-bold text-green-600">${{ "%.2f"|format(product.price_usd) }}</p>
+        </div>
+    {% endfor %}
     </div>
-  </div>
-
-  <div class="footer">
-    &copy; 2026 {{ site_name }} · Made by Kojo
-  </div>
-</body>
-</html>
+</div>
+{% endblock %}
