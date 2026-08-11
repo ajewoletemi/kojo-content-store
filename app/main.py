@@ -1,5 +1,5 @@
 from sqlalchemy import text
-from fastapi import FastAPI, Request, Depends, Form, UploadFile, File, HTTPException
+from fastapi import FastAPI, Request, Depends, Form, UploadFile, File, HTTPException, BackgroundTasks
 from fastapi.templating import Jinja2Templates
 from fastapi.staticfiles import StaticFiles
 from fastapi.responses import HTMLResponse, RedirectResponse, FileResponse
@@ -7,6 +7,8 @@ from sqlalchemy.orm import Session
 import os
 import shutil
 import uuid
+import smtplib
+from email.mime.text import MIMEText
 from pathlib import Path
 
 from .database import engine, Base, get_db
@@ -27,6 +29,21 @@ UPLOAD_DIR.mkdir(parents=True, exist_ok=True)
 SITE_NAME = os.getenv("SITE_NAME", "Kojo Tools Store")
 ADMIN_EMAIL = os.getenv("ADMIN_EMAIL", "admin@example.com")
 ADMIN_PASSWORD = os.getenv("ADMIN_PASSWORD", "ChangeMe123!")
+SMTP_EMAIL = os.getenv("SMTP_EMAIL", "") # Your gmail
+SMTP_PASSWORD = os.getenv("SMTP_PASSWORD", "") # Your gmail app password
+
+def send_email(to_email: str, subject: str, body: str):
+    if not SMTP_EMAIL: return
+    try:
+        msg = MIMEText(body)
+        msg["Subject"] = subject
+        msg["From"] = SITE_NAME
+        msg["To"] = to_email
+        with smtplib.SMTP_SSL("smtp.gmail.com", 465) as server:
+            server.login(SMTP_EMAIL, SMTP_PASSWORD)
+            server.sendmail(SMTP_EMAIL, to_email, msg.as_string())
+    except Exception as e:
+        print(f"Email error: {e}")
 
 def create_admin_if_needed(db: Session):
     try:
@@ -44,13 +61,13 @@ def create_admin_if_needed(db: Session):
 def startup():
     db = next(get_db())
     try:
-        # Auto migrate columns from BTC to USD
         db.execute(text("ALTER TABLE products RENAME COLUMN price_btc TO price_usd"))
+        db.execute(text("ALTER TABLE products ADD COLUMN IF NOT EXISTS image_url VARCHAR"))
         db.execute(text("ALTER TABLE products DROP COLUMN IF EXISTS price_usd_approx"))
         db.execute(text("ALTER TABLE orders RENAME COLUMN amount_btc TO amount_usd"))
         db.execute(text("ALTER TABLE orders RENAME COLUMN tx_id TO notes"))
         db.commit()
-        print("✅ DB Migrated to USD")
+        print("✅ DB Migrated to USD + Image")
     except Exception as e:
         db.rollback()
         print(f"ℹ️ DB already migrated or new: {e}")
@@ -151,7 +168,7 @@ async def admin_panel(request: Request, user=Depends(require_admin), db: Session
     return render(request, "admin.html", {"products": products, "orders": orders}, user=user)
 
 @app.post("/admin/upload")
-async def admin_upload(title: str = Form(...), category: str = Form("document"), description: str = Form(""), price_usd: float = Form(...), file: UploadFile = File(None), user=Depends(require_admin), db: Session = Depends(get_db)):
+async def admin_upload(title: str = Form(...), category: str = Form("document"), description: str = Form(""), price_usd: float = Form(...), image_url: str = Form(""), file: UploadFile = File(None), user=Depends(require_admin), db: Session = Depends(get_db)):
     file_path = None
     if file and file.filename:
         ext = Path(file.filename).suffix
@@ -159,7 +176,7 @@ async def admin_upload(title: str = Form(...), category: str = Form("document"),
         dest = UPLOAD_DIR / unique_name
         with open(dest, "wb") as buffer: shutil.copyfileobj(file.file, buffer)
         file_path = unique_name
-    product = Product(title=title, description=description, category=category, price_usd=price_usd, file_path=file_path, is_active=True)
+    product = Product(title=title, description=description, category=category, price_usd=price_usd, image_url=image_url, file_path=file_path, is_active=True)
     db.add(product)
     db.commit()
     return RedirectResponse("/admin", status_code=303)
@@ -171,9 +188,27 @@ async def toggle_product(product_id: int, user=Depends(require_admin), db: Sessi
     return RedirectResponse("/admin", status_code=303)
 
 @app.post("/admin/order/{order_id}/mark-paid")
-async def mark_paid(order_id: int, user=Depends(require_admin), db: Session = Depends(get_db)):
+async def mark_paid(order_id: int, background_tasks: BackgroundTasks, user=Depends(require_admin), db: Session = Depends(get_db)):
     order = db.query(Order).filter(Order.id == order_id).first()
-    if order: order.status = "paid"; db.commit()
+    if order: 
+        order.status = "paid"
+        db.commit()
+        # OPTION C: Auto-email customer with Spam note
+        if order.product.file_path:
+            body = f"""Thanks! Your payment for '{order.product.title}' is confirmed.
+
+Download here: https://your-site.com/download/{order.id}
+
+Can't find the email? Please check your Spam/Junk/Promotions folder.
+"""
+        else:
+            body = f"""Thanks, we received your payment. 
+
+We will deliver your '{order.product.title}' to this email within 24hrs.
+
+Can't find our emails? Please check your Spam/Junk/Promotions folder and add us to your contacts.
+"""
+        background_tasks.add_task(send_email, order.user.email, f"Order #{order.id} Confirmed - {SITE_NAME}", body)
     return RedirectResponse("/admin", status_code=303)
 
 @app.get("/health")
