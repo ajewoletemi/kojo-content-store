@@ -1,0 +1,59 @@
+{% extends "base.html" %}
+{% block title %}Edit Product · {{ site_name }}{% endblock %}
+
+{% block content %}
+<div class="container" style="max-width: 700px;">
+
+  <h2 class="section-title">Edit Product</h2>
+  <p class="section-sub">Update product details</p>
+
+  <div class="card">
+    <form method="post" action="/admin/product/{{ product.id }}/edit">
+      
+      <div class="form-group">
+        <label>Title</label>
+        <input type="text" name="title" value="{{ product.title }}" required>
+      </div>
+
+      <div class="form-group">
+        <label>Category</label>
+        <select name="category">
+          <option value="document" {% if product.category == 'document' %}selected{% endif %}>Document</option>
+          <option value="software" {% if product.category == 'software' %}selected{% endif %}>Software</option>
+          <option value="service" {% if product.category == 'service' %}selected{% endif %}>Service</option>
+        </select>
+      </div>
+
+      <div class="form-group">
+        <label>Description</label>
+        <textarea name="description" rows="4">{{ product.description or '' }}</textarea>
+      </div>
+
+      <div class="form-group">
+        <label>Price (USD)</label>
+        <input type="number" step="0.01" name="price_usd" value="{{ product.price_usd }}" required>
+      </div>
+
+      <div class="form-group">
+        <label>Image URL</label>
+        <input type="text" name="image_url" value="{{ product.image_url or '' }}" placeholder="https://i.imgur.com/xxxxx.jpg">
+      </div>
+
+      <div class="form-group">
+        <label>Status</label>
+        <select name="is_active">
+          <option value="true" {% if product.is_active %}selected{% endif %}>Active (Visible)</option>
+          <option value="false" {% if not product.is_active %}selected{% endif %}>Hidden</option>
+        </select>
+      </div>
+
+      <div style="display: flex; gap: 0.75rem; margin-top: 1.5rem;">
+        <button type="submit" class="btn btn-blue">Save Changes</button>
+        <a href="/admin" class="btn btn-outline">Cancel</a>
+      </div>
+
+    </form>
+  </div>
+
+</div>
+{% endblock %}
