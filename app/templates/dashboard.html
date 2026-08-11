@@ -7,7 +7,6 @@
   <h1 class="section-title">Dashboard</h1>
   <p class="section-sub">Welcome back, {{ user.full_name or user.email }}!</p>
 
-  <!-- PRODUCTS SECTION -->
   <h2 class="section-title" style="margin-top: 2rem;">Available Products</h2>
   <p class="section-sub">Browse and purchase tools, documents and software</p>
 
@@ -16,7 +15,7 @@
     {% for product in products %}
     <div class="card product-card">
       
-      <!-- Product Image (wide but proportional) -->
+      <!-- Wide proportional image -->
       <div style="width: 100%; aspect-ratio: 16/10; overflow: hidden; border-radius: 10px; background: #f1f5f9; margin-bottom: 1rem;">
         {% if product.image_url %}
           <img src="{{ product.image_url }}" 
@@ -29,25 +28,18 @@
         {% endif %}
       </div>
 
-      <!-- Category -->
       <span class="category">{{ product.category|capitalize }}</span>
-
-      <!-- Title -->
       <h3>{{ product.title }}</h3>
 
-      <!-- Description -->
       {% if product.description %}
       <p class="desc">{{ product.description }}</p>
       {% endif %}
 
-      <!-- Price + Buy Button -->
       <div style="display: flex; justify-content: space-between; align-items: center; margin-top: auto; gap: 0.75rem;">
         <div class="price">${{ "%.2f"|format(product.price_usd) }}</div>
         
         <form method="post" action="/buy/{{ product.id }}" style="margin: 0;">
-          <button type="submit" class="btn btn-blue">
-            Buy Now
-          </button>
+          <button type="submit" class="btn btn-blue">Buy Now</button>
         </form>
       </div>
 
@@ -61,7 +53,6 @@
   {% endif %}
 
 
-  <!-- ORDER HISTORY -->
   <h2 class="section-title" style="margin-top: 3rem;">Order History</h2>
   <p class="section-sub">Your past purchases</p>
 
