@@ -2,49 +2,92 @@
 {% block title %}Order #{{ order.id }} · {{ site_name }}{% endblock %}
 
 {% block content %}
-<div class="container" style="max-width: 700px;">
+<div class="container" style="max-width: 680px;">
 
   <div class="card">
-    <h2 class="section-title">Order #{{ order.id }}</h2>
-    
-    <div style="margin: 1.5rem 0; padding: 1rem; background: #f0f9ff; border-left: 4px solid #3b82f6; border-radius: 8px;">
-      <strong>📧 Delivery Email:</strong> {{ user.email }} <br>
-      <span style="color: #6b7280; font-size: 0.9rem;">
-        Your product/service will be sent to this email after payment is confirmed by admin.
-        <br><strong>Tip:</strong> If you don't see our email, check Spam/Junk folder.
-      </span>
-    </div>
 
-    <div style="margin-bottom: 1rem;">
+    <h2 class="section-title">Order #{{ order.id }}</h2>
+
+    <!-- Success messages -->
+    {% if success == "credits" %}
+    <div class="success-box" style="margin-bottom: 1.5rem;">
+      ✅ Paid successfully with Store Credit!  
+      You can now download the product below.
+    </div>
+    {% endif %}
+
+    {% if request.query_params.get('submitted') %}
+    <div style="background: #fef3c7; border: 1px solid #fcd34d; color: #92400e; padding: 1rem 1.2rem; border-radius: 10px; margin-bottom: 1.5rem;">
+      ✅ Payment submitted!  
+      Once our admin confirms the Bitcoin payment, your product will be delivered  
+      <strong>or</strong> the amount will be added to your Store Credit.
+    </div>
+    {% endif %}
+
+    <!-- Order details -->
+    <div style="margin-bottom: 1.5rem; line-height: 1.7;">
       <strong>Product:</strong> {{ order.product.title }} <br>
       <strong>Amount:</strong> ${{ "%.2f"|format(order.amount_usd) }} <br>
-      <strong>Status:</strong> 
-      <span class="badge {% if order.status == 'paid' %}badge-paid{% else %}badge-pending{% endif %}">
-        {{ order.status|capitalize }}
-      </span>
+      <strong>Status:</strong>
+      {% if order.status == "paid" %}
+        <span class="badge badge-paid">Paid</span>
+      {% elif order.status == "credited" %}
+        <span class="badge" style="background:#dbeafe; color:#1d4ed8;">Added as Credit</span>
+      {% else %}
+        <span class="badge badge-pending">Pending Payment</span>
+      {% endif %}
     </div>
 
-    {% if order.status == 'pending' %}
+    <!-- PENDING → Show Bitcoin payment -->
+    {% if order.status == "pending" %}
+    <div style="background: #fff7ed; border: 1px solid #fdba74; border-radius: 12px; padding: 1.4rem; margin-bottom: 1.5rem;">
+      <h3 style="margin-bottom: 0.8rem; color: #9a3412;">Pay with Bitcoin</h3>
+      
+      <p style="margin-bottom: 0.6rem; font-size: 0.95rem;">
+        Send exactly <strong>${{ "%.2f"|format(order.amount_usd) }}</strong> worth of BTC to:
+      </p>
+
+      <div class="btc-box">
+        {{ bitcoin_address }}
+      </div>
+
+      <p style="font-size: 0.88rem; color: #9a3412; margin-top: 0.8rem;">
+        After sending, click the button below.  
+        Admin will confirm and either deliver the product or add the amount as Store Credit.
+      </p>
+    </div>
+
     <form method="post" action="/order/{{ order.id }}/confirm">
       <div class="form-group">
-        <label>Payment Proof / Notes</label>
-        <textarea name="notes" rows="3" placeholder="e.g. I paid via bank transfer. Transaction ref: 12345"></textarea>
+        <label>Transaction ID / Notes (optional)</label>
+        <textarea name="notes" rows="2" placeholder="Paste TX ID or any note..."></textarea>
       </div>
-      <button type="submit" class="btn btn-orange">I Have Paid</button>
+      <button type="submit" class="btn btn-orange btn-full">I Have Paid</button>
     </form>
-    
-    <p style="margin-top: 1rem; color: #6b7280; font-size: 0.9rem;">
-      After you click "I Have Paid", admin will confirm and your download link will appear here.
-    </p>
     {% endif %}
 
-    {% if order.status == 'paid' %}
+    <!-- PAID → Download -->
+    {% if order.status == "paid" %}
       {% if order.product.file_path %}
-        <a href="/download/{{ order.id }}" class="btn btn-blue">Download Product</a>
+        <a href="/download/{{ order.id }}" class="btn btn-blue btn-full" style="margin-top: 1rem;">
+          Download Product
+        </a>
       {% else %}
-        <p style="color: #16a34a; font-weight: 600;">✓ Payment Confirmed. Check your email: {{ user.email }} for delivery.</p>
+        <div class="success-box">
+          ✓ Payment confirmed.  
+          This is a service product — it will be delivered to your email: <strong>{{ user.email }}</strong>
+        </div>
       {% endif %}
     {% endif %}
+
+    <!-- CREDITED -->
+    {% if order.status == "credited" %}
+    <div class="success-box">
+      ✓ This payment was added as Store Credit.  
+      You can now use your credit balance to buy other products.
+    </div>
+    {% endif %}
+
   </div>
 
 </div>
