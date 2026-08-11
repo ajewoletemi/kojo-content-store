@@ -4,6 +4,7 @@ from pydantic_settings import BaseSettings
 class Settings(BaseSettings):
     DATABASE_URL: str = os.getenv("DATABASE_URL", "sqlite:///./test.db")
     SECRET_KEY: str = os.getenv("SECRET_KEY", "supersecretkey")
+    SITE_NAME: str = os.getenv("SITE_NAME", "Kojo Content Store")  # <-- ADDED THIS
     
     # Leave these empty for now. We'll add Paystack/Twilio later
     PAYSTACK_SECRET_KEY: str = os.getenv("PAYSTACK_SECRET_KEY", "")
