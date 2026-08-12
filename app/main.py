@@ -13,7 +13,7 @@ from pathlib import Path
 from supabase import create_client, Client
 
 from .database import engine, Base, get_db
-from .models import User, Product, Order
+from .models import User, Product, Order, CustomService
 from .auth import (
     get_password_hash, authenticate_user, create_access_token,
     get_current_user, require_user, require_admin
@@ -31,29 +31,27 @@ templates = Jinja2Templates(directory="app/templates")
 UPLOAD_DIR = Path("app/uploads")
 UPLOAD_DIR.mkdir(parents=True, exist_ok=True)
 (UPLOAD_DIR / "images").mkdir(parents=True, exist_ok=True)
+(UPLOAD_DIR / "delivery").mkdir(parents=True, exist_ok=True)
 
-# Environment
 SITE_NAME = os.getenv("SITE_NAME", "Kojo Tools Store")
 BITCOIN_ADDRESS = os.getenv("BITCOIN_ADDRESS", "bc1qxy2kgdygjrsqtzq2n0yrf2493p83kkfjhx0wlh")
 ADMIN_EMAIL = os.getenv("ADMIN_EMAIL", "admin@example.com")
 ADMIN_PASSWORD = os.getenv("ADMIN_PASSWORD", "ChangeMe123!")
-
 SMTP_EMAIL = os.getenv("SMTP_EMAIL")
 SMTP_PASSWORD = os.getenv("SMTP_PASSWORD")
 SMTP_HOST = "smtp.gmail.com"
 SMTP_PORT = 587
 SITE_URL = "https://kojo-content-store.onrender.com"
 
-# Supabase
 SUPABASE_URL = os.getenv("SUPABASE_URL")
 SUPABASE_KEY = os.getenv("SUPABASE_KEY")
 supabase: Client = None
 if SUPABASE_URL and SUPABASE_KEY:
     try:
         supabase = create_client(SUPABASE_URL, SUPABASE_KEY)
-        print("✅ Supabase client ready")
+        print("✅ Supabase ready")
     except Exception as e:
-        print(f"⚠️ Supabase init failed: {e}")
+        print(f"⚠️ Supabase failed: {e}")
 
 
 def upload_image_to_supabase(file: UploadFile) -> str | None:
@@ -72,7 +70,7 @@ def upload_image_to_supabase(file: UploadFile) -> str | None:
         )
         return supabase.storage.from_("product-images").get_public_url(unique_name)
     except Exception as e:
-        print(f"❌ Supabase upload failed: {e}")
+        print(f"❌ Image upload failed: {e}")
         return None
 
 
@@ -96,6 +94,22 @@ def send_email(to_email: str, subject: str, body: str):
         return False
 
 
+def seed_custom_services(db: Session):
+    defaults = [
+        ("Order SMTP", "e.g. office, google llc/gsuite, any smtp required", 50.0),
+        ("Order SCAMA", "e.g. boa, wellsfargo, robinhood etc", 100.0),
+        ("Order LETTERS", "e.g. Boa security letter, office letter notice etc", 50.0),
+        ("Order CPANEL", "e.g. hacked $25 or created $50", 25.0),
+        ("Order Custom link", "A month link with any scama + email or telegram bot for result", 150.0),
+        ("Order LEADS", "Input any specified lead", 100.0),
+    ]
+    for title, placeholder, price in defaults:
+        exists = db.query(CustomService).filter(CustomService.title == title).first()
+        if not exists:
+            db.add(CustomService(title=title, placeholder=placeholder, price_usd=price, is_active=True))
+    db.commit()
+
+
 def create_admin_if_needed(db: Session):
     try:
         admin = db.query(User).filter(User.email == ADMIN_EMAIL).first()
@@ -109,9 +123,10 @@ def create_admin_if_needed(db: Session):
             )
             db.add(admin)
             db.commit()
-            print(f"✅ Admin created: {ADMIN_EMAIL}")
+            print(f"✅ Admin created")
+        seed_custom_services(db)
     except Exception as e:
-        print(f"⚠️ Admin check failed: {e}")
+        print(f"⚠️ Startup error: {e}")
         db.rollback()
 
 
@@ -201,7 +216,58 @@ async def dashboard(request: Request, user=Depends(require_user), db: Session = 
     }, user=user)
 
 
-# ==================== BUY / ORDER ====================
+# ==================== CUSTOM ORDERS (USER) ====================
+
+@app.get("/custom-orders", response_class=HTMLResponse)
+async def custom_orders_page(request: Request, user=Depends(require_user), db: Session = Depends(get_db)):
+    services = db.query(CustomService).filter(CustomService.is_active == True).order_by(CustomService.id).all()
+    return render(request, "custom_orders.html", {"services": services}, user=user)
+
+
+@app.post("/custom-orders/{service_id}")
+async def place_custom_order(
+    service_id: int,
+    details: str = Form(...),
+    user=Depends(require_user),
+    db: Session = Depends(get_db)
+):
+    service = db.query(CustomService).filter(CustomService.id == service_id, CustomService.is_active == True).first()
+    if not service:
+        raise HTTPException(status_code=404, detail="Service not found")
+
+    # Pay with credits if enough
+    if (user.credits or 0) >= service.price_usd:
+        user.credits = (user.credits or 0) - service.price_usd
+        order = Order(
+            user_id=user.id,
+            product_id=None,
+            amount_usd=service.price_usd,
+            status="paid",
+            payment_type="credits",
+            notes=details.strip(),
+            custom_title=service.title
+        )
+        db.add(order)
+        db.commit()
+        db.refresh(order)
+        return RedirectResponse(f"/order/{order.id}?success=credits", status_code=303)
+
+    order = Order(
+        user_id=user.id,
+        product_id=None,
+        amount_usd=service.price_usd,
+        status="pending",
+        payment_type="btc",
+        notes=details.strip(),
+        custom_title=service.title
+    )
+    db.add(order)
+    db.commit()
+    db.refresh(order)
+    return RedirectResponse(f"/order/{order.id}", status_code=303)
+
+
+# ==================== BUY PRODUCT ====================
 
 @app.post("/buy/{product_id}")
 async def buy_product(product_id: int, user=Depends(require_user), db: Session = Depends(get_db)):
@@ -209,29 +275,20 @@ async def buy_product(product_id: int, user=Depends(require_user), db: Session =
     if not product:
         raise HTTPException(status_code=404, detail="Product not found")
 
-    # Pay with Store Credit
     if (user.credits or 0) >= product.price_usd:
         user.credits = (user.credits or 0) - product.price_usd
         order = Order(
-            user_id=user.id,
-            product_id=product.id,
-            amount_usd=product.price_usd,
-            status="paid",
-            payment_type="credits",
-            notes="Paid with Store Credit"
+            user_id=user.id, product_id=product.id, amount_usd=product.price_usd,
+            status="paid", payment_type="credits", notes="Paid with Store Credit"
         )
         db.add(order)
         db.commit()
         db.refresh(order)
         return RedirectResponse(f"/order/{order.id}?success=credits", status_code=303)
 
-    # Create pending BTC order
     order = Order(
-        user_id=user.id,
-        product_id=product.id,
-        amount_usd=product.price_usd,
-        status="pending",
-        payment_type="btc"
+        user_id=user.id, product_id=product.id, amount_usd=product.price_usd,
+        status="pending", payment_type="btc"
     )
     db.add(order)
     db.commit()
@@ -246,9 +303,7 @@ async def order_page(order_id: int, request: Request, user=Depends(require_user)
         raise HTTPException(status_code=404, detail="Order not found")
     success = request.query_params.get("success")
     return render(request, "order.html", {
-        "order": order,
-        "bitcoin_address": BITCOIN_ADDRESS,
-        "success": success
+        "order": order, "bitcoin_address": BITCOIN_ADDRESS, "success": success
     }, user=user)
 
 
@@ -258,7 +313,7 @@ async def confirm_payment(order_id: int, notes: str = Form(""), user=Depends(req
     if not order:
         raise HTTPException(status_code=404, detail="Order not found")
     if order.status == "pending":
-        order.notes = notes.strip() or order.notes or "User clicked I have paid"
+        order.notes = (order.notes or "") + " | " + (notes.strip() or "User clicked I have paid")
         db.commit()
     return RedirectResponse(f"/order/{order_id}?submitted=1", status_code=303)
 
@@ -267,13 +322,19 @@ async def confirm_payment(order_id: int, notes: str = Form(""), user=Depends(req
 async def download_file(order_id: int, user=Depends(require_user), db: Session = Depends(get_db)):
     order = db.query(Order).filter(Order.id == order_id, Order.user_id == user.id).first()
     if not order or order.status != "paid":
-        raise HTTPException(status_code=403, detail="Payment not confirmed")
-    if not order.product.file_path:
-        raise HTTPException(status_code=404, detail="No file available for this product")
-    file_path = UPLOAD_DIR / order.product.file_path
-    if not file_path.exists():
-        raise HTTPException(status_code=404, detail="File not found on server")
-    return FileResponse(path=file_path, filename=file_path.name)
+        raise HTTPException(status_code=403, detail="Not allowed")
+
+    # Prefer delivery file (uploaded by admin), then product file
+    file_to_serve = None
+    if order.delivery_file:
+        file_to_serve = UPLOAD_DIR / "delivery" / order.delivery_file
+    elif order.product and order.product.file_path:
+        file_to_serve = UPLOAD_DIR / order.product.file_path
+
+    if not file_to_serve or not file_to_serve.exists():
+        raise HTTPException(status_code=404, detail="No file available")
+
+    return FileResponse(path=file_to_serve, filename=file_to_serve.name)
 
 
 # ==================== ADMIN ====================
@@ -283,10 +344,12 @@ async def admin_panel(request: Request, user=Depends(require_admin), db: Session
     products = db.query(Product).order_by(Product.created_at.desc()).all()
     orders = db.query(Order).order_by(Order.created_at.desc()).limit(50).all()
     pending_orders = [o for o in orders if o.status == "pending"]
+    custom_services = db.query(CustomService).order_by(CustomService.id).all()
     return render(request, "admin.html", {
         "products": products,
         "orders": orders,
-        "pending_orders": pending_orders
+        "pending_orders": pending_orders,
+        "custom_services": custom_services
     }, user=user)
 
 
@@ -302,17 +365,14 @@ async def admin_upload(
     user=Depends(require_admin),
     db: Session = Depends(get_db)
 ):
-    # Digital file
     file_path = None
     if file and file.filename:
         ext = Path(file.filename).suffix
         unique_name = f"{uuid.uuid4().hex}{ext}"
-        dest = UPLOAD_DIR / unique_name
-        with open(dest, "wb") as buffer:
+        with open(UPLOAD_DIR / unique_name, "wb") as buffer:
             shutil.copyfileobj(file.file, buffer)
         file_path = unique_name
 
-    # Image → Supabase
     final_image_url = image_url.strip() or None
     if image and image.filename:
         uploaded = upload_image_to_supabase(image)
@@ -320,13 +380,9 @@ async def admin_upload(
             final_image_url = uploaded
 
     product = Product(
-        title=title,
-        description=description,
-        category=category,
-        price_usd=price_usd,
-        image_url=final_image_url,
-        file_path=file_path,
-        is_active=True
+        title=title, description=description, category=category,
+        price_usd=price_usd, image_url=final_image_url,
+        file_path=file_path, is_active=True
     )
     db.add(product)
     db.commit()
@@ -365,7 +421,6 @@ async def edit_product(
     product.price_usd = price_usd
     product.is_active = is_active == "true"
 
-    # New image
     if image and image.filename:
         uploaded = upload_image_to_supabase(image)
         if uploaded:
@@ -373,12 +428,10 @@ async def edit_product(
     elif image_url.strip():
         product.image_url = image_url.strip()
 
-    # New or replacement digital file
     if file and file.filename:
         ext = Path(file.filename).suffix
         unique_name = f"{uuid.uuid4().hex}{ext}"
-        dest = UPLOAD_DIR / unique_name
-        with open(dest, "wb") as buffer:
+        with open(UPLOAD_DIR / unique_name, "wb") as buffer:
             shutil.copyfileobj(file.file, buffer)
         product.file_path = unique_name
 
@@ -395,38 +448,72 @@ async def toggle_product(product_id: int, user=Depends(require_admin), db: Sessi
     return RedirectResponse("/admin", status_code=303)
 
 
-@app.post("/admin/order/{order_id}/mark-paid")
-async def mark_paid(order_id: int, user=Depends(require_admin), db: Session = Depends(get_db)):
-    """Mark as Paid → appears in customer Order History + Download button + email"""
+# ----- DELIVER ORDER (Mark Paid with message + file) -----
+
+@app.get("/admin/order/{order_id}/deliver", response_class=HTMLResponse)
+async def deliver_order_page(order_id: int, request: Request, user=Depends(require_admin), db: Session = Depends(get_db)):
     order = db.query(Order).filter(Order.id == order_id).first()
-    if order and order.status == "pending":
-        order.status = "paid"
-        db.commit()
+    if not order:
+        raise HTTPException(status_code=404, detail="Order not found")
+    return render(request, "deliver_order.html", {"order": order}, user=user)
 
-        try:
-            subject = f"Your order #{order.id} is confirmed – {SITE_NAME}"
-            body = f"""Hello,
 
-Your payment for "{order.product.title}" has been confirmed.
+@app.post("/admin/order/{order_id}/deliver")
+async def deliver_order(
+    order_id: int,
+    delivery_message: str = Form(""),
+    delivery_file: UploadFile = File(None),
+    user=Depends(require_admin),
+    db: Session = Depends(get_db)
+):
+    order = db.query(Order).filter(Order.id == order_id).first()
+    if not order or order.status != "pending":
+        return RedirectResponse("/admin", status_code=303)
 
+    order.status = "paid"
+    order.delivery_message = delivery_message.strip() or None
+
+    if delivery_file and delivery_file.filename:
+        ext = Path(delivery_file.filename).suffix
+        unique_name = f"{uuid.uuid4().hex}{ext}"
+        dest = UPLOAD_DIR / "delivery" / unique_name
+        with open(dest, "wb") as buffer:
+            shutil.copyfileobj(delivery_file.file, buffer)
+        order.delivery_file = unique_name
+
+    db.commit()
+
+    # Send email
+    try:
+        title = order.custom_title or (order.product.title if order.product else "Your Order")
+        subject = f"Your order #{order.id} is ready – {SITE_NAME}"
+        body = f"""Hello,
+
+Your order has been completed.
+
+Order: {title}
 Order ID: #{order.id}
 Amount: ${order.amount_usd:.2f}
 
-You can download your product from your dashboard:
+"""
+        if order.delivery_message:
+            body += f"Message from us:\n{order.delivery_message}\n\n"
+
+        body += f"""You can view and download from your dashboard:
 {SITE_URL}/dashboard
 
-Thank you for shopping with {SITE_NAME}!
+Thank you!
+{SITE_NAME}
 """
-            send_email(order.user.email, subject, body)
-        except Exception as e:
-            print(f"Email error (ignored): {e}")
+        send_email(order.user.email, subject, body)
+    except Exception as e:
+        print(f"Email error: {e}")
 
     return RedirectResponse("/admin", status_code=303)
 
 
 @app.post("/admin/order/{order_id}/add-credit")
 async def add_as_credit(order_id: int, user=Depends(require_admin), db: Session = Depends(get_db)):
-    """Add as Credit → money goes into customer Store Credit balance"""
     order = db.query(Order).filter(Order.id == order_id).first()
     if order and order.status == "pending":
         buyer = db.query(User).filter(User.id == order.user_id).first()
@@ -435,23 +522,62 @@ async def add_as_credit(order_id: int, user=Depends(require_admin), db: Session 
             order.status = "credited"
             order.notes = (order.notes or "") + " | Added as Store Credit"
             db.commit()
-
             try:
                 subject = f"Store Credit added – {SITE_NAME}"
                 body = f"""Hello,
 
-We have added ${order.amount_usd:.2f} to your Store Credit balance.
+We added ${order.amount_usd:.2f} to your Store Credit.
 
-You can now use this credit to buy products on the store:
-{SITE_URL}/dashboard
+Use it here: {SITE_URL}/dashboard
 
 Thank you!
 {SITE_NAME}
 """
                 send_email(buyer.email, subject, body)
             except Exception as e:
-                print(f"Email error (ignored): {e}")
+                print(f"Email error: {e}")
+    return RedirectResponse("/admin", status_code=303)
 
+
+# ----- CUSTOM SERVICES MANAGEMENT -----
+
+@app.post("/admin/custom-service")
+async def create_custom_service(
+    title: str = Form(...),
+    placeholder: str = Form(""),
+    price_usd: float = Form(...),
+    user=Depends(require_admin),
+    db: Session = Depends(get_db)
+):
+    db.add(CustomService(title=title, placeholder=placeholder, price_usd=price_usd, is_active=True))
+    db.commit()
+    return RedirectResponse("/admin", status_code=303)
+
+
+@app.post("/admin/custom-service/{service_id}/toggle")
+async def toggle_custom_service(service_id: int, user=Depends(require_admin), db: Session = Depends(get_db)):
+    service = db.query(CustomService).filter(CustomService.id == service_id).first()
+    if service:
+        service.is_active = not service.is_active
+        db.commit()
+    return RedirectResponse("/admin", status_code=303)
+
+
+@app.post("/admin/custom-service/{service_id}/edit")
+async def edit_custom_service(
+    service_id: int,
+    title: str = Form(...),
+    placeholder: str = Form(""),
+    price_usd: float = Form(...),
+    user=Depends(require_admin),
+    db: Session = Depends(get_db)
+):
+    service = db.query(CustomService).filter(CustomService.id == service_id).first()
+    if service:
+        service.title = title
+        service.placeholder = placeholder
+        service.price_usd = price_usd
+        db.commit()
     return RedirectResponse("/admin", status_code=303)
 
 
