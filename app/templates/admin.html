@@ -1,0 +1,264 @@
+{% extends "base.html" %}
+{% block title %}Admin · {{ site_name }}{% endblock %}
+
+{% block content %}
+<div class="container">
+
+  <h2 class="section-title">Admin Panel</h2>
+
+  <!-- PENDING PAYMENTS -->
+  {% if pending_orders %}
+  <div class="card" style="margin-bottom: 2rem; border: 2px solid #f59e0b; background: #fffbeb;">
+    <h3 style="margin-bottom: 1rem; color: #b45309;">⏳ Pending Payments ({{ pending_orders|length }})</h3>
+    <div style="overflow-x: auto;">
+      <table>
+        <thead>
+          <tr>
+            <th>Order</th>
+            <th>Customer</th>
+            <th>Item</th>
+            <th>Amount</th>
+            <th>Notes</th>
+            <th>Actions</th>
+          </tr>
+        </thead>
+        <tbody>
+          {% for o in pending_orders %}
+          <tr>
+            <td>#{{ o.id }}</td>
+            <td>{{ o.user.email }}</td>
+            <td>
+              {% if o.custom_title %}
+                {{ o.custom_title }}
+              {% elif o.product %}
+                {{ o.product.title }}
+              {% else %}
+                Custom Order
+              {% endif %}
+            </td>
+            <td>${{ "%.2f"|format(o.amount_usd) }}</td>
+            <td style="max-width: 180px; font-size: 0.85rem;">{{ o.notes or "—" }}</td>
+            <td>
+              <div style="display: flex; gap: 0.4rem; flex-wrap: wrap;">
+                <a href="/admin/order/{{ o.id }}/deliver" class="btn btn-sm btn-blue">Mark Paid (Deliver)</a>
+                <form method="post" action="/admin/order/{{ o.id }}/add-credit" style="display:inline;">
+                  <button type="submit" class="btn btn-sm btn-orange">Add as Credit</button>
+                </form>
+              </div>
+            </td>
+          </tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+  </div>
+  {% endif %}
+
+  <!-- CUSTOM SERVICES MANAGEMENT -->
+  <div class="card" style="margin-bottom: 2rem;">
+    <h3 style="margin-bottom: 1rem;">Custom Order Types</h3>
+
+    <!-- Add new -->
+    <form method="post" action="/admin/custom-service" style="margin-bottom: 1.5rem; padding-bottom: 1.5rem; border-bottom: 1px solid #e2e8f0;">
+      <div class="two-col">
+        <div class="form-group">
+          <label>Title</label>
+          <input type="text" name="title" placeholder="e.g. Order SMTP" required>
+        </div>
+        <div class="form-group">
+          <label>Price (USD)</label>
+          <input type="number" step="0.01" name="price_usd" placeholder="50.00" required>
+        </div>
+      </div>
+      <div class="form-group">
+        <label>Placeholder / Example text</label>
+        <input type="text" name="placeholder" placeholder="e.g. office, google llc/gsuite...">
+      </div>
+      <button type="submit" class="btn btn-orange">Add Custom Order Type</button>
+    </form>
+
+    <!-- List existing -->
+    <div style="overflow-x: auto;">
+      <table>
+        <thead>
+          <tr>
+            <th>Title</th>
+            <th>Placeholder</th>
+            <th>Price</th>
+            <th>Status</th>
+            <th>Actions</th>
+          </tr>
+        </thead>
+        <tbody>
+          {% for s in custom_services %}
+          <tr>
+            <td>{{ s.title }}</td>
+            <td style="max-width: 220px; font-size: 0.85rem;">{{ s.placeholder }}</td>
+            <td>${{ "%.2f"|format(s.price_usd) }}</td>
+            <td>
+              {% if s.is_active %}
+                <span class="badge badge-paid">Active</span>
+              {% else %}
+                <span class="badge badge-pending">Hidden</span>
+              {% endif %}
+            </td>
+            <td>
+              <form method="post" action="/admin/custom-service/{{ s.id }}/toggle" style="display:inline;">
+                <button type="submit" class="btn btn-sm btn-outline">
+                  {% if s.is_active %}Hide{% else %}Show{% endif %}
+                </button>
+              </form>
+            </td>
+          </tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+  </div>
+
+  <!-- UPLOAD NEW PRODUCT -->
+  <div class="card" style="margin-bottom: 2rem;">
+    <h3 style="margin-bottom: 1.2rem;">Upload New Product</h3>
+    <form method="post" action="/admin/upload" enctype="multipart/form-data">
+      <div class="form-group">
+        <label>Title</label>
+        <input type="text" name="title" placeholder="e.g. Facebook Ads Guide 2026" required>
+      </div>
+      <div class="form-group">
+        <label>Category</label>
+        <select name="category">
+          <option value="document">Document</option>
+          <option value="software">Software</option>
+          <option value="service">Service</option>
+        </select>
+      </div>
+      <div class="form-group">
+        <label>Description</label>
+        <textarea name="description" rows="3"></textarea>
+      </div>
+      <div class="form-group">
+        <label>Price (USD)</label>
+        <input type="number" step="0.01" name="price_usd" required>
+      </div>
+      <div class="form-group">
+        <label>Product Image (upload)</label>
+        <input type="file" name="image" accept="image/*">
+      </div>
+      <div class="form-group">
+        <label>Or Image URL</label>
+        <input type="text" name="image_url" placeholder="https://...">
+      </div>
+      <div class="form-group">
+        <label>Digital File</label>
+        <input type="file" name="file">
+      </div>
+      <button type="submit" class="btn btn-orange">Upload Product</button>
+    </form>
+  </div>
+
+  <!-- PRODUCTS -->
+  <div class="card" style="margin-bottom: 2rem;">
+    <h3 style="margin-bottom: 1rem;">Products ({{ products|length }})</h3>
+    <div style="overflow-x: auto;">
+      <table>
+        <thead>
+          <tr>
+            <th>ID</th>
+            <th>Title</th>
+            <th>Category</th>
+            <th>Price</th>
+            <th>Status</th>
+            <th>Actions</th>
+          </tr>
+        </thead>
+        <tbody>
+          {% for p in products %}
+          <tr>
+            <td>{{ p.id }}</td>
+            <td>{{ p.title }}</td>
+            <td>{{ p.category|capitalize }}</td>
+            <td>${{ "%.2f"|format(p.price_usd) }}</td>
+            <td>
+              {% if p.is_active %}
+                <span class="badge badge-paid">Active</span>
+              {% else %}
+                <span class="badge badge-pending">Hidden</span>
+              {% endif %}
+            </td>
+            <td>
+              <div style="display: flex; gap: 0.4rem;">
+                <a href="/admin/product/{{ p.id }}/edit" class="btn btn-sm btn-blue">Edit</a>
+                <form method="post" action="/admin/toggle/{{ p.id }}" style="display:inline;">
+                  <button type="submit" class="btn btn-sm btn-outline">
+                    {% if p.is_active %}Hide{% else %}Show{% endif %}
+                  </button>
+                </form>
+              </div>
+            </td>
+          </tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+  </div>
+
+  <!-- ALL ORDERS -->
+  <div class="card">
+    <h3 style="margin-bottom: 1rem;">All Recent Orders ({{ orders|length }})</h3>
+    <div style="overflow-x: auto;">
+      <table>
+        <thead>
+          <tr>
+            <th>Order</th>
+            <th>Customer</th>
+            <th>Item</th>
+            <th>Amount</th>
+            <th>Status</th>
+            <th>Actions</th>
+          </tr>
+        </thead>
+        <tbody>
+          {% for o in orders %}
+          <tr>
+            <td>#{{ o.id }}</td>
+            <td>{{ o.user.email }}</td>
+            <td>
+              {% if o.custom_title %}
+                {{ o.custom_title }}
+              {% elif o.product %}
+                {{ o.product.title }}
+              {% else %}
+                Custom
+              {% endif %}
+            </td>
+            <td>${{ "%.2f"|format(o.amount_usd) }}</td>
+            <td>
+              {% if o.status == "paid" %}
+                <span class="badge badge-paid">Paid</span>
+              {% elif o.status == "credited" %}
+                <span class="badge" style="background:#dbeafe; color:#1d4ed8;">Credited</span>
+              {% else %}
+                <span class="badge badge-pending">Pending</span>
+              {% endif %}
+            </td>
+            <td>
+              {% if o.status == "pending" %}
+              <div style="display: flex; gap: 0.4rem; flex-wrap: wrap;">
+                <a href="/admin/order/{{ o.id }}/deliver" class="btn btn-sm btn-blue">Mark Paid</a>
+                <form method="post" action="/admin/order/{{ o.id }}/add-credit" style="display:inline;">
+                  <button type="submit" class="btn btn-sm btn-orange">Add Credit</button>
+                </form>
+              </div>
+              {% else %}
+                —
+              {% endif %}
+            </td>
+          </tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+  </div>
+
+</div>
+{% endblock %}
