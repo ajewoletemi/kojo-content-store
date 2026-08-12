@@ -5,10 +5,10 @@
 <div class="container" style="max-width: 700px;">
 
   <h2 class="section-title">Edit Product</h2>
-  <p class="section-sub">Update product details</p>
+  <p class="section-sub">Update product details and image</p>
 
   <div class="card">
-    <form method="post" action="/admin/product/{{ product.id }}/edit">
+    <form method="post" action="/admin/product/{{ product.id }}/edit" enctype="multipart/form-data">
       
       <div class="form-group">
         <label>Title</label>
@@ -34,8 +34,24 @@
         <input type="number" step="0.01" name="price_usd" value="{{ product.price_usd }}" required>
       </div>
 
+      <!-- Current image preview -->
+      {% if product.image_url %}
       <div class="form-group">
-        <label>Image URL</label>
+        <label>Current Image</label>
+        <div style="margin-top: 0.5rem;">
+          <img src="{{ product.image_url }}" alt="Current" style="max-width: 220px; border-radius: 8px; border: 1px solid #e2e8f0;">
+        </div>
+      </div>
+      {% endif %}
+
+      <div class="form-group">
+        <label>Upload New Image (jpg/png)</label>
+        <input type="file" name="image" accept="image/*">
+        <span style="font-size: 0.85rem; color: #6b7280;">Leave empty to keep the current image</span>
+      </div>
+
+      <div class="form-group">
+        <label>Or paste Image URL</label>
         <input type="text" name="image_url" value="{{ product.image_url or '' }}" placeholder="https://i.imgur.com/xxxxx.jpg">
       </div>
 
