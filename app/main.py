@@ -22,11 +22,15 @@ Base.metadata.create_all(bind=engine)
 
 app = FastAPI(title="Kojo Tools Store")
 
+# Static files
 app.mount("/static", StaticFiles(directory="app/static"), name="static")
+app.mount("/uploads", StaticFiles(directory="app/uploads"), name="uploads")  # for product images
+
 templates = Jinja2Templates(directory="app/templates")
 
 UPLOAD_DIR = Path("app/uploads")
 UPLOAD_DIR.mkdir(parents=True, exist_ok=True)
+(UPLOAD_DIR / "images").mkdir(parents=True, exist_ok=True)
 
 SITE_NAME = os.getenv("SITE_NAME", "Kojo Tools Store")
 BITCOIN_ADDRESS = os.getenv("BITCOIN_ADDRESS", "bc1qxy2kgdygjrsqtzq2n0yrf2493p83kkfjhx0wlh")
@@ -161,7 +165,11 @@ async def logout():
 async def dashboard(request: Request, user=Depends(require_user), db: Session = Depends(get_db)):
     products = db.query(Product).filter(Product.is_active == True).order_by(Product.created_at.desc()).all()
     orders = db.query(Order).filter(Order.user_id == user.id).order_by(Order.created_at.desc()).all()
-    return render(request, "dashboard.html", {"products": products, "orders": orders, "credits": user.credits or 0.0}, user=user)
+    return render(request, "dashboard.html", {
+        "products": products,
+        "orders": orders,
+        "credits": user.credits or 0.0
+    }, user=user)
 
 
 # ==================== BUY / ORDER ====================
@@ -174,15 +182,26 @@ async def buy_product(product_id: int, user=Depends(require_user), db: Session =
 
     if (user.credits or 0) >= product.price_usd:
         user.credits = (user.credits or 0) - product.price_usd
-        order = Order(user_id=user.id, product_id=product.id, amount_usd=product.price_usd,
-                      status="paid", payment_type="credits", notes="Paid with Store Credit")
+        order = Order(
+            user_id=user.id,
+            product_id=product.id,
+            amount_usd=product.price_usd,
+            status="paid",
+            payment_type="credits",
+            notes="Paid with Store Credit"
+        )
         db.add(order)
         db.commit()
         db.refresh(order)
         return RedirectResponse(f"/order/{order.id}?success=credits", status_code=303)
 
-    order = Order(user_id=user.id, product_id=product.id, amount_usd=product.price_usd,
-                  status="pending", payment_type="btc")
+    order = Order(
+        user_id=user.id,
+        product_id=product.id,
+        amount_usd=product.price_usd,
+        status="pending",
+        payment_type="btc"
+    )
     db.add(order)
     db.commit()
     db.refresh(order)
@@ -195,7 +214,11 @@ async def order_page(order_id: int, request: Request, user=Depends(require_user)
     if not order:
         raise HTTPException(status_code=404, detail="Order not found")
     success = request.query_params.get("success")
-    return render(request, "order.html", {"order": order, "bitcoin_address": BITCOIN_ADDRESS, "success": success}, user=user)
+    return render(request, "order.html", {
+        "order": order,
+        "bitcoin_address": BITCOIN_ADDRESS,
+        "success": success
+    }, user=user)
 
 
 @app.post("/order/{order_id}/confirm")
@@ -243,10 +266,12 @@ async def admin_upload(
     description: str = Form(""),
     price_usd: float = Form(...),
     image_url: str = Form(""),
-    file: UploadFile = File(None),
+    image: UploadFile = File(None),          # new: product image file
+    file: UploadFile = File(None),           # product digital file
     user=Depends(require_admin),
     db: Session = Depends(get_db)
 ):
+    # Save product digital file (if any)
     file_path = None
     if file and file.filename:
         ext = Path(file.filename).suffix
@@ -256,12 +281,23 @@ async def admin_upload(
             shutil.copyfileobj(file.file, buffer)
         file_path = unique_name
 
+    # Save product image (if uploaded)
+    final_image_url = image_url.strip() or None
+    if image and image.filename:
+        ext = Path(image.filename).suffix.lower()
+        if ext in [".jpg", ".jpeg", ".png", ".webp", ".gif"]:
+            unique_name = f"{uuid.uuid4().hex}{ext}"
+            dest = UPLOAD_DIR / "images" / unique_name
+            with open(dest, "wb") as buffer:
+                shutil.copyfileobj(image.file, buffer)
+            final_image_url = f"/uploads/images/{unique_name}"
+
     product = Product(
         title=title,
         description=description,
         category=category,
         price_usd=price_usd,
-        image_url=image_url.strip() or None,
+        image_url=final_image_url,
         file_path=file_path,
         is_active=True
     )
@@ -286,6 +322,7 @@ async def edit_product(
     description: str = Form(""),
     price_usd: float = Form(...),
     image_url: str = Form(""),
+    image: UploadFile = File(None),          # new image upload
     is_active: str = Form("true"),
     user=Depends(require_admin),
     db: Session = Depends(get_db)
@@ -298,8 +335,20 @@ async def edit_product(
     product.category = category
     product.description = description
     product.price_usd = price_usd
-    product.image_url = image_url.strip() or None
     product.is_active = is_active == "true"
+
+    # Keep existing image unless a new one is uploaded or a new URL is provided
+    if image and image.filename:
+        ext = Path(image.filename).suffix.lower()
+        if ext in [".jpg", ".jpeg", ".png", ".webp", ".gif"]:
+            unique_name = f"{uuid.uuid4().hex}{ext}"
+            dest = UPLOAD_DIR / "images" / unique_name
+            with open(dest, "wb") as buffer:
+                shutil.copyfileobj(image.file, buffer)
+            product.image_url = f"/uploads/images/{unique_name}"
+    elif image_url.strip():
+        product.image_url = image_url.strip()
+
     db.commit()
     return RedirectResponse("/admin", status_code=303)
 
