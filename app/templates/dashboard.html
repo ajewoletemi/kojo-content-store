@@ -33,11 +33,9 @@
   <div class="grid">
     {% for product in products %}
     <div class="card product-card">
-      
       <div style="width: 100%; aspect-ratio: 16/10; overflow: hidden; border-radius: 10px; background: #f1f5f9; margin-bottom: 1rem;">
         {% if product.image_url %}
-          <img src="{{ product.image_url }}" 
-               alt="{{ product.title }}"
+          <img src="{{ product.image_url }}" alt="{{ product.title }}"
                style="width: 100%; height: 100%; object-fit: cover; display: block;">
         {% else %}
           <div style="width: 100%; height: 100%; display: flex; align-items: center; justify-content: center; color: #94a3b8; font-size: 0.9rem;">
@@ -55,12 +53,10 @@
 
       <div style="display: flex; justify-content: space-between; align-items: center; margin-top: auto; gap: 0.75rem;">
         <div class="price">${{ "%.2f"|format(product.price_usd) }}</div>
-        
         <form method="post" action="/buy/{{ product.id }}" style="margin: 0;">
           <button type="submit" class="btn btn-blue">Buy Now</button>
         </form>
       </div>
-
     </div>
     {% endfor %}
   </div>
@@ -72,16 +68,17 @@
 
   <!-- ORDER HISTORY -->
   <h2 class="section-title" style="margin-top: 3rem;">Order History</h2>
-  <p class="section-sub">Your past purchases</p>
+  <p class="section-sub">Your past purchases and custom orders</p>
 
   <div class="card" style="overflow-x: auto;">
     {% if orders %}
     <table>
       <thead>
         <tr>
-          <th>Product / Service</th>
+          <th>Service / Product</th>
+          <th>Your Request</th>
+          <th>Admin Note</th>
           <th>Amount</th>
-          <th>Payment</th>
           <th>Status</th>
           <th>Action</th>
         </tr>
@@ -90,16 +87,23 @@
         {% for order in orders %}
         <tr>
           <td>
-            {% if order.custom_title %}
-              {{ order.custom_title }}
-            {% elif order.product %}
-              {{ order.product.title }}
-            {% else %}
-              Custom Order
-            {% endif %}
+            <strong>
+              {% if order.custom_title %}
+                {{ order.custom_title }}
+              {% elif order.product %}
+                {{ order.product.title }}
+              {% else %}
+                Custom Order
+              {% endif %}
+            </strong>
+          </td>
+          <td style="max-width: 180px; font-size: 0.9rem; color: #334155;">
+            {{ order.notes or "—" }}
+          </td>
+          <td style="max-width: 180px; font-size: 0.9rem; color: #166534;">
+            {{ order.delivery_message or "—" }}
           </td>
           <td>${{ "%.2f"|format(order.amount_usd) }}</td>
-          <td>{{ order.payment_type|capitalize if order.payment_type else "BTC" }}</td>
           <td>
             {% if order.status == "paid" %}
               <span class="badge badge-paid">Paid</span>
