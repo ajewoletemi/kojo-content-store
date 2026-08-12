@@ -32,7 +32,7 @@ UPLOAD_DIR = Path("app/uploads")
 UPLOAD_DIR.mkdir(parents=True, exist_ok=True)
 (UPLOAD_DIR / "images").mkdir(parents=True, exist_ok=True)
 
-# Environment variables
+# Environment
 SITE_NAME = os.getenv("SITE_NAME", "Kojo Tools Store")
 BITCOIN_ADDRESS = os.getenv("BITCOIN_ADDRESS", "bc1qxy2kgdygjrsqtzq2n0yrf2493p83kkfjhx0wlh")
 ADMIN_EMAIL = os.getenv("ADMIN_EMAIL", "admin@example.com")
@@ -44,45 +44,40 @@ SMTP_HOST = "smtp.gmail.com"
 SMTP_PORT = 587
 SITE_URL = "https://kojo-content-store.onrender.com"
 
-# Supabase Storage
+# Supabase
 SUPABASE_URL = os.getenv("SUPABASE_URL")
 SUPABASE_KEY = os.getenv("SUPABASE_KEY")
 supabase: Client = None
 if SUPABASE_URL and SUPABASE_KEY:
-    supabase = create_client(SUPABASE_URL, SUPABASE_KEY)
+    try:
+        supabase = create_client(SUPABASE_URL, SUPABASE_KEY)
+        print("✅ Supabase client ready")
+    except Exception as e:
+        print(f"⚠️ Supabase init failed: {e}")
 
 
 def upload_image_to_supabase(file: UploadFile) -> str | None:
-    """Upload image to Supabase Storage and return public URL"""
     if not supabase or not file or not file.filename:
         return None
-
     try:
         ext = Path(file.filename).suffix.lower()
         if ext not in [".jpg", ".jpeg", ".png", ".webp", ".gif"]:
             return None
-
         unique_name = f"{uuid.uuid4().hex}{ext}"
         file_bytes = file.file.read()
-
-        # Upload to the public bucket
         supabase.storage.from_("product-images").upload(
             path=unique_name,
             file=file_bytes,
             file_options={"content-type": file.content_type or "image/jpeg"}
         )
-
-        # Get public URL
-        public_url = supabase.storage.from_("product-images").get_public_url(unique_name)
-        return public_url
+        return supabase.storage.from_("product-images").get_public_url(unique_name)
     except Exception as e:
-        print(f"❌ Supabase image upload failed: {e}")
+        print(f"❌ Supabase upload failed: {e}")
         return None
 
 
 def send_email(to_email: str, subject: str, body: str):
     if not SMTP_EMAIL or not SMTP_PASSWORD:
-        print("⚠️ SMTP_EMAIL or SMTP_PASSWORD not set – email not sent")
         return False
     try:
         msg = MIMEMultipart()
@@ -90,14 +85,14 @@ def send_email(to_email: str, subject: str, body: str):
         msg["To"] = to_email
         msg["Subject"] = subject
         msg.attach(MIMEText(body, "plain"))
-        with smtplib.SMTP(SMTP_HOST, SMTP_PORT) as server:
+        with smtplib.SMTP(SMTP_HOST, SMTP_PORT, timeout=10) as server:
             server.starttls()
             server.login(SMTP_EMAIL, SMTP_PASSWORD)
             server.send_message(msg)
         print(f"✅ Email sent to {to_email}")
         return True
     except Exception as e:
-        print(f"❌ Failed to send email: {e}")
+        print(f"❌ Email failed: {e}")
         return False
 
 
@@ -115,10 +110,8 @@ def create_admin_if_needed(db: Session):
             db.add(admin)
             db.commit()
             print(f"✅ Admin created: {ADMIN_EMAIL}")
-        else:
-            print(f"Admin already exists: {ADMIN_EMAIL}")
     except Exception as e:
-        print(f"⚠️ Could not create/check admin: {e}")
+        print(f"⚠️ Admin check failed: {e}")
         db.rollback()
 
 
@@ -216,20 +209,29 @@ async def buy_product(product_id: int, user=Depends(require_user), db: Session =
     if not product:
         raise HTTPException(status_code=404, detail="Product not found")
 
+    # Pay with Store Credit
     if (user.credits or 0) >= product.price_usd:
         user.credits = (user.credits or 0) - product.price_usd
         order = Order(
-            user_id=user.id, product_id=product.id, amount_usd=product.price_usd,
-            status="paid", payment_type="credits", notes="Paid with Store Credit"
+            user_id=user.id,
+            product_id=product.id,
+            amount_usd=product.price_usd,
+            status="paid",
+            payment_type="credits",
+            notes="Paid with Store Credit"
         )
         db.add(order)
         db.commit()
         db.refresh(order)
         return RedirectResponse(f"/order/{order.id}?success=credits", status_code=303)
 
+    # Create pending BTC order
     order = Order(
-        user_id=user.id, product_id=product.id, amount_usd=product.price_usd,
-        status="pending", payment_type="btc"
+        user_id=user.id,
+        product_id=product.id,
+        amount_usd=product.price_usd,
+        status="pending",
+        payment_type="btc"
     )
     db.add(order)
     db.commit()
@@ -244,7 +246,9 @@ async def order_page(order_id: int, request: Request, user=Depends(require_user)
         raise HTTPException(status_code=404, detail="Order not found")
     success = request.query_params.get("success")
     return render(request, "order.html", {
-        "order": order, "bitcoin_address": BITCOIN_ADDRESS, "success": success
+        "order": order,
+        "bitcoin_address": BITCOIN_ADDRESS,
+        "success": success
     }, user=user)
 
 
@@ -265,10 +269,10 @@ async def download_file(order_id: int, user=Depends(require_user), db: Session =
     if not order or order.status != "paid":
         raise HTTPException(status_code=403, detail="Payment not confirmed")
     if not order.product.file_path:
-        raise HTTPException(status_code=404, detail="No file available")
+        raise HTTPException(status_code=404, detail="No file available for this product")
     file_path = UPLOAD_DIR / order.product.file_path
     if not file_path.exists():
-        raise HTTPException(status_code=404, detail="File not found")
+        raise HTTPException(status_code=404, detail="File not found on server")
     return FileResponse(path=file_path, filename=file_path.name)
 
 
@@ -280,7 +284,9 @@ async def admin_panel(request: Request, user=Depends(require_admin), db: Session
     orders = db.query(Order).order_by(Order.created_at.desc()).limit(50).all()
     pending_orders = [o for o in orders if o.status == "pending"]
     return render(request, "admin.html", {
-        "products": products, "orders": orders, "pending_orders": pending_orders
+        "products": products,
+        "orders": orders,
+        "pending_orders": pending_orders
     }, user=user)
 
 
@@ -296,7 +302,7 @@ async def admin_upload(
     user=Depends(require_admin),
     db: Session = Depends(get_db)
 ):
-    # Digital product file (still stored locally for now)
+    # Digital file
     file_path = None
     if file and file.filename:
         ext = Path(file.filename).suffix
@@ -306,12 +312,12 @@ async def admin_upload(
             shutil.copyfileobj(file.file, buffer)
         file_path = unique_name
 
-    # Product image → Supabase Storage (permanent)
+    # Image → Supabase
     final_image_url = image_url.strip() or None
     if image and image.filename:
-        uploaded_url = upload_image_to_supabase(image)
-        if uploaded_url:
-            final_image_url = uploaded_url
+        uploaded = upload_image_to_supabase(image)
+        if uploaded:
+            final_image_url = uploaded
 
     product = Product(
         title=title,
@@ -344,6 +350,7 @@ async def edit_product(
     price_usd: float = Form(...),
     image_url: str = Form(""),
     image: UploadFile = File(None),
+    file: UploadFile = File(None),
     is_active: str = Form("true"),
     user=Depends(require_admin),
     db: Session = Depends(get_db)
@@ -358,12 +365,22 @@ async def edit_product(
     product.price_usd = price_usd
     product.is_active = is_active == "true"
 
+    # New image
     if image and image.filename:
-        uploaded_url = upload_image_to_supabase(image)
-        if uploaded_url:
-            product.image_url = uploaded_url
+        uploaded = upload_image_to_supabase(image)
+        if uploaded:
+            product.image_url = uploaded
     elif image_url.strip():
         product.image_url = image_url.strip()
+
+    # New or replacement digital file
+    if file and file.filename:
+        ext = Path(file.filename).suffix
+        unique_name = f"{uuid.uuid4().hex}{ext}"
+        dest = UPLOAD_DIR / unique_name
+        with open(dest, "wb") as buffer:
+            shutil.copyfileobj(file.file, buffer)
+        product.file_path = unique_name
 
     db.commit()
     return RedirectResponse("/admin", status_code=303)
@@ -380,30 +397,36 @@ async def toggle_product(product_id: int, user=Depends(require_admin), db: Sessi
 
 @app.post("/admin/order/{order_id}/mark-paid")
 async def mark_paid(order_id: int, user=Depends(require_admin), db: Session = Depends(get_db)):
+    """Mark as Paid → appears in customer Order History + Download button + email"""
     order = db.query(Order).filter(Order.id == order_id).first()
     if order and order.status == "pending":
         order.status = "paid"
         db.commit()
 
-        subject = f"Your order #{order.id} is confirmed – {SITE_NAME}"
-        body = f"""Hello,
+        try:
+            subject = f"Your order #{order.id} is confirmed – {SITE_NAME}"
+            body = f"""Hello,
 
 Your payment for "{order.product.title}" has been confirmed.
 
 Order ID: #{order.id}
 Amount: ${order.amount_usd:.2f}
 
-You can now download your product from your dashboard:
+You can download your product from your dashboard:
 {SITE_URL}/dashboard
 
 Thank you for shopping with {SITE_NAME}!
 """
-        send_email(order.user.email, subject, body)
+            send_email(order.user.email, subject, body)
+        except Exception as e:
+            print(f"Email error (ignored): {e}")
+
     return RedirectResponse("/admin", status_code=303)
 
 
 @app.post("/admin/order/{order_id}/add-credit")
 async def add_as_credit(order_id: int, user=Depends(require_admin), db: Session = Depends(get_db)):
+    """Add as Credit → money goes into customer Store Credit balance"""
     order = db.query(Order).filter(Order.id == order_id).first()
     if order and order.status == "pending":
         buyer = db.query(User).filter(User.id == order.user_id).first()
@@ -413,18 +436,22 @@ async def add_as_credit(order_id: int, user=Depends(require_admin), db: Session 
             order.notes = (order.notes or "") + " | Added as Store Credit"
             db.commit()
 
-            subject = f"Store Credit added – {SITE_NAME}"
-            body = f"""Hello,
+            try:
+                subject = f"Store Credit added – {SITE_NAME}"
+                body = f"""Hello,
 
 We have added ${order.amount_usd:.2f} to your Store Credit balance.
 
-You can now use this credit to buy products:
+You can now use this credit to buy products on the store:
 {SITE_URL}/dashboard
 
 Thank you!
 {SITE_NAME}
 """
-            send_email(buyer.email, subject, body)
+                send_email(buyer.email, subject, body)
+            except Exception as e:
+                print(f"Email error (ignored): {e}")
+
     return RedirectResponse("/admin", status_code=303)
 
 
