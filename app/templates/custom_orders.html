@@ -1,0 +1,39 @@
+{% extends "base.html" %}
+{% block title %}Custom Orders · {{ site_name }}{% endblock %}
+
+{% block content %}
+<div class="container">
+
+  <h1 class="section-title">Custom Orders</h1>
+  <p class="section-sub">Place a custom request. Fill the details and click Place Order.</p>
+
+  {% if services %}
+  <div class="grid">
+    {% for s in services %}
+    <div class="card" style="display: flex; flex-direction: column;">
+      <h3 style="margin-bottom: 0.5rem;">{{ s.title }}</h3>
+      <p style="color: #64748b; font-size: 0.9rem; margin-bottom: 1rem;">
+        {{ s.placeholder }}
+      </p>
+
+      <form method="post" action="/custom-orders/{{ s.id }}" style="margin-top: auto;">
+        <div class="form-group">
+          <label>Your details</label>
+          <input type="text" name="details" placeholder="{{ s.placeholder }}" required>
+        </div>
+        <div style="display: flex; justify-content: space-between; align-items: center; margin-top: 1rem;">
+          <div class="price">${{ "%.2f"|format(s.price_usd) }}</div>
+          <button type="submit" class="btn btn-blue">Place Order</button>
+        </div>
+      </form>
+    </div>
+    {% endfor %}
+  </div>
+  {% else %}
+  <div class="card" style="text-align: center; padding: 2rem; color: #64748b;">
+    No custom orders available at the moment.
+  </div>
+  {% endif %}
+
+</div>
+{% endblock %}
