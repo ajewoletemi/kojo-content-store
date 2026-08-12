@@ -1,0 +1,43 @@
+{% extends "base.html" %}
+{% block title %}Deliver Order #{{ order.id }} · {{ site_name }}{% endblock %}
+
+{% block content %}
+<div class="container" style="max-width: 650px;">
+
+  <h2 class="section-title">Deliver Order #{{ order.id }}</h2>
+  <p class="section-sub">
+    Customer: {{ order.user.email }} <br>
+    {% if order.custom_title %}{{ order.custom_title }}{% elif order.product %}{{ order.product.title }}{% endif %}
+    – ${{ "%.2f"|format(order.amount_usd) }}
+  </p>
+
+  {% if order.notes %}
+  <div class="card" style="margin-bottom: 1.5rem; background: #f8fafc;">
+    <strong>Customer request:</strong><br>
+    {{ order.notes }}
+  </div>
+  {% endif %}
+
+  <div class="card">
+    <form method="post" action="/admin/order/{{ order.id }}/deliver" enctype="multipart/form-data">
+      
+      <div class="form-group">
+        <label>Message to customer (optional)</label>
+        <textarea name="delivery_message" rows="4" placeholder="Write any delivery note or instructions..."></textarea>
+      </div>
+
+      <div class="form-group">
+        <label>Upload delivery file (optional)</label>
+        <input type="file" name="delivery_file">
+        <span style="font-size: 0.85rem; color: #6b7280;">This file will be available for the customer to download</span>
+      </div>
+
+      <div style="display: flex; gap: 0.75rem; margin-top: 1.5rem;">
+        <button type="submit" class="btn btn-blue">Confirm & Mark as Paid</button>
+        <a href="/admin" class="btn btn-outline">Cancel</a>
+      </div>
+    </form>
+  </div>
+
+</div>
+{% endblock %}
