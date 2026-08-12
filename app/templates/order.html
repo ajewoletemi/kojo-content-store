@@ -11,23 +11,32 @@
     <!-- Success messages -->
     {% if success == "credits" %}
     <div class="success-box" style="margin-bottom: 1.5rem;">
-      ✅ Paid successfully with Store Credit!  
-      You can now download the product below.
+      ✅ Paid successfully with Store Credit!
     </div>
     {% endif %}
 
     {% if request.query_params.get('submitted') %}
     <div style="background: #fef3c7; border: 1px solid #fcd34d; color: #92400e; padding: 1rem 1.2rem; border-radius: 10px; margin-bottom: 1.5rem;">
       ✅ Payment submitted!  
-      Once our admin confirms the Bitcoin payment, your product will be delivered  
+      Once our admin confirms the Bitcoin payment, your order will be delivered  
       <strong>or</strong> the amount will be added to your Store Credit.
     </div>
     {% endif %}
 
     <!-- Order details -->
-    <div style="margin-bottom: 1.5rem; line-height: 1.7;">
-      <strong>Product:</strong> {{ order.product.title }} <br>
+    <div style="margin-bottom: 1.5rem; line-height: 1.8;">
+      <strong>Service / Product:</strong>
+      {% if order.custom_title %}
+        {{ order.custom_title }}
+      {% elif order.product %}
+        {{ order.product.title }}
+      {% else %}
+        Custom Order
+      {% endif %}
+      <br>
+
       <strong>Amount:</strong> ${{ "%.2f"|format(order.amount_usd) }} <br>
+
       <strong>Status:</strong>
       {% if order.status == "paid" %}
         <span class="badge badge-paid">Paid</span>
@@ -37,6 +46,22 @@
         <span class="badge badge-pending">Pending Payment</span>
       {% endif %}
     </div>
+
+    <!-- What the user requested -->
+    {% if order.notes %}
+    <div style="background: #f8fafc; border: 1px solid #e2e8f0; border-radius: 10px; padding: 1rem; margin-bottom: 1.2rem;">
+      <strong style="color: #334155;">Your Request:</strong><br>
+      <span style="color: #475569;">{{ order.notes }}</span>
+    </div>
+    {% endif %}
+
+    <!-- Admin delivery message -->
+    {% if order.delivery_message %}
+    <div style="background: #f0fdf4; border: 1px solid #bbf7d0; border-radius: 10px; padding: 1rem; margin-bottom: 1.2rem;">
+      <strong style="color: #166534;">Admin Note / Delivery:</strong><br>
+      <span style="color: #15803d;">{{ order.delivery_message }}</span>
+    </div>
+    {% endif %}
 
     <!-- PENDING → Show Bitcoin payment -->
     {% if order.status == "pending" %}
@@ -53,7 +78,7 @@
 
       <p style="font-size: 0.88rem; color: #9a3412; margin-top: 0.8rem;">
         After sending, click the button below.  
-        Admin will confirm and either deliver the product or add the amount as Store Credit.
+        Admin will confirm and either deliver the order or add the amount as Store Credit.
       </p>
     </div>
 
@@ -66,16 +91,20 @@
     </form>
     {% endif %}
 
-    <!-- PAID → Download -->
+    <!-- PAID → Download or message -->
     {% if order.status == "paid" %}
-      {% if order.product.file_path %}
+      {% if order.delivery_file or (order.product and order.product.file_path) %}
         <a href="/download/{{ order.id }}" class="btn btn-blue btn-full" style="margin-top: 1rem;">
-          Download Product
+          Download File
         </a>
       {% else %}
-        <div class="success-box">
+        <div class="success-box" style="margin-top: 1rem;">
           ✓ Payment confirmed.  
-          This is a service product — it will be delivered to your email: <strong>{{ user.email }}</strong>
+          {% if order.delivery_message %}
+            Check the Admin Note above for your order details.
+          {% else %}
+            Your order has been processed. Check your email for updates.
+          {% endif %}
         </div>
       {% endif %}
     {% endif %}
