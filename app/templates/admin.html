@@ -16,7 +16,7 @@
           <tr>
             <th>Order</th>
             <th>Customer</th>
-            <th>Product</th>
+            <th>Item</th>
             <th>Amount</th>
             <th>Notes</th>
             <th>Actions</th>
@@ -27,14 +27,20 @@
           <tr>
             <td>#{{ o.id }}</td>
             <td>{{ o.user.email }}</td>
-            <td>{{ o.product.title }}</td>
+            <td>
+              {% if o.custom_title %}
+                {{ o.custom_title }}
+              {% elif o.product %}
+                {{ o.product.title }}
+              {% else %}
+                Custom Order
+              {% endif %}
+            </td>
             <td>${{ "%.2f"|format(o.amount_usd) }}</td>
             <td style="max-width: 180px; font-size: 0.85rem;">{{ o.notes or "—" }}</td>
             <td>
               <div style="display: flex; gap: 0.4rem; flex-wrap: wrap;">
-                <form method="post" action="/admin/order/{{ o.id }}/mark-paid" style="display:inline;">
-                  <button type="submit" class="btn btn-sm btn-blue">Mark Paid (Deliver)</button>
-                </form>
+                <a href="/admin/order/{{ o.id }}/deliver" class="btn btn-sm btn-blue">Mark Paid (Deliver)</a>
                 <form method="post" action="/admin/order/{{ o.id }}/add-credit" style="display:inline;">
                   <button type="submit" class="btn btn-sm btn-orange">Add as Credit</button>
                 </form>
@@ -48,6 +54,68 @@
   </div>
   {% endif %}
 
+  <!-- CUSTOM SERVICES MANAGEMENT -->
+  <div class="card" style="margin-bottom: 2rem;">
+    <h3 style="margin-bottom: 1rem;">Custom Order Types</h3>
+
+    <!-- Add new -->
+    <form method="post" action="/admin/custom-service" style="margin-bottom: 1.5rem; padding-bottom: 1.5rem; border-bottom: 1px solid #e2e8f0;">
+      <div class="two-col">
+        <div class="form-group">
+          <label>Title</label>
+          <input type="text" name="title" placeholder="e.g. Order SMTP" required>
+        </div>
+        <div class="form-group">
+          <label>Price (USD)</label>
+          <input type="number" step="0.01" name="price_usd" placeholder="50.00" required>
+        </div>
+      </div>
+      <div class="form-group">
+        <label>Placeholder / Example text</label>
+        <input type="text" name="placeholder" placeholder="e.g. office, google llc/gsuite...">
+      </div>
+      <button type="submit" class="btn btn-orange">Add Custom Order Type</button>
+    </form>
+
+    <!-- List existing -->
+    <div style="overflow-x: auto;">
+      <table>
+        <thead>
+          <tr>
+            <th>Title</th>
+            <th>Placeholder</th>
+            <th>Price</th>
+            <th>Status</th>
+            <th>Actions</th>
+          </tr>
+        </thead>
+        <tbody>
+          {% for s in custom_services %}
+          <tr>
+            <td>{{ s.title }}</td>
+            <td style="max-width: 220px; font-size: 0.85rem;">{{ s.placeholder }}</td>
+            <td>${{ "%.2f"|format(s.price_usd) }}</td>
+            <td>
+              {% if s.is_active %}
+                <span class="badge badge-paid">Active</span>
+              {% else %}
+                <span class="badge badge-pending">Hidden</span>
+              {% endif %}
+            </td>
+            <td>
+              <form method="post" action="/admin/custom-service/{{ s.id }}/toggle" style="display:inline;">
+                <button type="submit" class="btn btn-sm btn-outline">
+                  {% if s.is_active %}Hide{% else %}Show{% endif %}
+                </button>
+              </form>
+            </td>
+          </tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+  </div>
+
   <!-- UPLOAD NEW PRODUCT -->
   <div class="card" style="margin-bottom: 2rem;">
     <h3 style="margin-bottom: 1.2rem;">Upload New Product</h3>
@@ -56,7 +124,6 @@
         <label>Title</label>
         <input type="text" name="title" placeholder="e.g. Facebook Ads Guide 2026" required>
       </div>
-
       <div class="form-group">
         <label>Category</label>
         <select name="category">
@@ -65,38 +132,31 @@
           <option value="service">Service</option>
         </select>
       </div>
-
       <div class="form-group">
         <label>Description</label>
-        <textarea name="description" rows="3" placeholder="What is this product about?"></textarea>
+        <textarea name="description" rows="3"></textarea>
       </div>
-
       <div class="form-group">
         <label>Price (USD)</label>
-        <input type="number" step="0.01" name="price_usd" placeholder="25.00" required>
+        <input type="number" step="0.01" name="price_usd" required>
       </div>
-
       <div class="form-group">
-        <label>Product Image (upload jpg/png)</label>
+        <label>Product Image (upload)</label>
         <input type="file" name="image" accept="image/*">
-        <span style="font-size: 0.85rem; color: #6b7280;">Upload a picture for the product card</span>
       </div>
-
       <div class="form-group">
-        <label>Or paste Image URL (optional)</label>
-        <input type="text" name="image_url" placeholder="https://i.imgur.com/xxxxx.jpg">
+        <label>Or Image URL</label>
+        <input type="text" name="image_url" placeholder="https://...">
       </div>
-
       <div class="form-group">
-        <label>Digital File (leave empty for Services)</label>
+        <label>Digital File</label>
         <input type="file" name="file">
       </div>
-
       <button type="submit" class="btn btn-orange">Upload Product</button>
     </form>
   </div>
 
-  <!-- PRODUCTS LIST -->
+  <!-- PRODUCTS -->
   <div class="card" style="margin-bottom: 2rem;">
     <h3 style="margin-bottom: 1rem;">Products ({{ products|length }})</h3>
     <div style="overflow-x: auto;">
@@ -126,7 +186,7 @@
               {% endif %}
             </td>
             <td>
-              <div style="display: flex; gap: 0.4rem; flex-wrap: wrap;">
+              <div style="display: flex; gap: 0.4rem;">
                 <a href="/admin/product/{{ p.id }}/edit" class="btn btn-sm btn-blue">Edit</a>
                 <form method="post" action="/admin/toggle/{{ p.id }}" style="display:inline;">
                   <button type="submit" class="btn btn-sm btn-outline">
@@ -151,7 +211,7 @@
           <tr>
             <th>Order</th>
             <th>Customer</th>
-            <th>Product</th>
+            <th>Item</th>
             <th>Amount</th>
             <th>Status</th>
             <th>Actions</th>
@@ -162,7 +222,15 @@
           <tr>
             <td>#{{ o.id }}</td>
             <td>{{ o.user.email }}</td>
-            <td>{{ o.product.title }}</td>
+            <td>
+              {% if o.custom_title %}
+                {{ o.custom_title }}
+              {% elif o.product %}
+                {{ o.product.title }}
+              {% else %}
+                Custom
+              {% endif %}
+            </td>
             <td>${{ "%.2f"|format(o.amount_usd) }}</td>
             <td>
               {% if o.status == "paid" %}
@@ -176,9 +244,7 @@
             <td>
               {% if o.status == "pending" %}
               <div style="display: flex; gap: 0.4rem; flex-wrap: wrap;">
-                <form method="post" action="/admin/order/{{ o.id }}/mark-paid" style="display:inline;">
-                  <button type="submit" class="btn btn-sm btn-blue">Mark Paid</button>
-                </form>
+                <a href="/admin/order/{{ o.id }}/deliver" class="btn btn-sm btn-blue">Mark Paid</a>
                 <form method="post" action="/admin/order/{{ o.id }}/add-credit" style="display:inline;">
                   <button type="submit" class="btn btn-sm btn-orange">Add Credit</button>
                 </form>
